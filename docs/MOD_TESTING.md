@@ -124,3 +124,4 @@
 - `python tests/run_architecture_checks.py --godot <Godot路径>`：隔离 `user://`，76 项本体/Mod 边界检查；`--project <工程副本>` 可指向已准备好的测试工程。
 - `python -m unittest discover -s tests -p test_build_contract.py -v`：三个入口各 4 种失败，共 12 个拒绝组合，以及三个真实 PCK 构建/结构校验；不安装到玩家目录。
 - 仍需配合 `run_persistence_checks.py`、`run_support_persistence_checks.py`、`run_ui_ux_checks.py`、`run_coop_recovery_checks.py` 等现有回归。原工程有本地 `godot_ai` 配置时，使用移除该工具配置的独立副本，不修改原 `project.godot`。本轮不是冷导入或真机通关。
+- `python -m unittest discover -s tests -p test_mod_option_api.py -v`：用实际管理页脚本验证旧 void 签名、解析元数据旧但运行期实现新、现代成功及保存失败四种情况；旧实现不得被调用。隔离加载本机旧包的针对性启停检查通过；带该包的整套设置回归仍会因旧页签场景缺少预期 `Label` 路径而失败，不能将针对性通过解释为旧包全面兼容。

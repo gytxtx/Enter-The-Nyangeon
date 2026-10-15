@@ -128,6 +128,8 @@ Declared in `project.godot:25-39`. 按声明顺序初始化。`Game._ready()` �
 - **PCK 预检（2026-10-15）**：安装事务在交换目录前调用 `script/mod_pack_validator.gd:6`，只读检查独立未加密完整包的 v2/v3/v4 文件头、运行引擎版本、目录路径、数据边界/重叠和各文件 MD5；不通过挂载候选包验证，以免改变当前资源视图。对应原生格式：[Godot 4.7 PCK 加载器](https://github.com/godotengine/godot/blob/4.7/core/io/file_access_pack.cpp#L268)。格式有效不代表脚本/玩法兼容，约束见 `CONVENTIONS.md` §10。
 - **启停状态事务（2026-10-15）**：`script/mod_state_store.gd:10,19` 校验 String→bool JSON，临时文件写完并重读后替换主档，只备份有效主档。首次无主/备份默认启用；现存坏主档或仅剩备份则全停用并在 MOD 页提示重新选择。备份可能早于最近一次停用，不能自动用其中的 true 恢复启用。`ModManager.set_enabled(): Dictionary`（`:1318`）返回 `{ok,error?}`，失败回滚内存开关；成功才清提示并通知 UI。`uninstall()` 先持久化 false 墓碑再删目录；保存失败不卸载，后续其他启停保存仍保留墓碑。备份供人工恢复，用户显式选择后可重建状态；`tests/run_mod_state_fx_checks.py` 覆盖失败路径和实际 UI。
 
+- **旧包签名兼容（2026-10-15）**：本机旧联机 PCK 含 `script/mod_manager.gd.remap` 和 `.gdc`，挂载后解析器可能将新版 `ModManager.set_enabled` 仍看作返回 void，尽管已创建的 autoload 实例使用新版代码。管理页通过 Node 运行期方法信息检查 Dictionary 返回契约，再以 `call` 取得 Variant 结果并判定成功；真正的旧 void 实现不调用、不改变启停状态，显示失败提示。`state_warning` 也通过属性查询兼容缺失字段。此处只修复解析与启停边界，不保证旧包覆盖的所有页面结构与新版一致；守卫 `tests/test_mod_option_api.py`。
+
 ### 1.12 ExtensionHooks / ProjectileSpawner（本体扩展点）
 
 

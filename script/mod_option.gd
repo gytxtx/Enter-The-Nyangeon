@@ -104,8 +104,10 @@ func _refresh() -> void:
 		list_box.add_child(_make_row(m))
 	if _pending_restart:
 		status_label.text = tr("mod_restart_notice")
-	elif not ModManager.state_warning.is_empty():
-		status_label.text = tr(ModManager.state_warning)
+	else:
+		var warning: Variant = ModManager.get("state_warning")
+		if warning is String and not warning.is_empty():
+			status_label.text = tr(warning)
 	_update_arrows()
 
 
@@ -446,10 +448,18 @@ func _cancel_drag() -> void:
 # ---------------- 启停 / 导入 ----------------
 
 func _on_toggle(id: String, on: bool) -> void:
-	var result := ModManager.set_enabled(id, on)
-	if not result.ok:
+	# 已挂载旧 PCK 的 .gd.remap 可能让解析器看到 void 旧签名；
+	# 以运行期 autoload 为准，且拒绝调用不能返回保存结果的旧实现。
+	var manager: Node = ModManager
+	var supports_result := false
+	for method in manager.get_method_list():
+		if method.name == "set_enabled":
+			supports_result = int(method.get("return", {}).get("type", TYPE_NIL)) == TYPE_DICTIONARY
+			break
+	var result: Variant = manager.call("set_enabled", id, on) if supports_result else null
+	if not result is Dictionary or not bool(result.get("ok", false)):
 		_refresh()
-		status_label.text = tr(str(result.error))
+		status_label.text = tr(str(result.get("error", "mod_state_save_failed"))) if result is Dictionary else tr("mod_state_save_failed")
 		return
 	_pending_restart = true
 	status_label.text = tr("mod_restart_notice")

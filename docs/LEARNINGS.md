@@ -2551,3 +2551,9 @@
 - Notes / 说明: 只把 tree_changed 换成 scene_changed 并在忙时拒绝，会丢掉准备房与正式关卡同帧重叠的后一请求。切场串行且最新有效请求胜出；过期操作不生成玩家、不发首回合。联机转场加独立场景代次，等待成功结果后才上报 _client_scene_ready；不能再以一个 process_frame 推断就绪。
 - Source / 来源: test
 - Date / 日期: 2026-10-15
+
+### [Mod/Parser] 旧 PCK 的 remap 可让静态返回签名与运行期 autoload 实现不一致
+- Evidence / 证据: 用户报告 `script/mod_option.gd:449` 的 `Cannot get return value of call to "set_enabled()" because it returns "void"`；`tests/test_mod_option_api.py`；本机 `etn_coop 0.1.10` 包目录包含 `script/mod_manager.gd.remap` / `.gdc`，隔离加载该包复现同一错误。
+- Notes / 说明: 当前源码明确返回 Dictionary，并不足以证明挂载旧包后的解析器也看到新版签名。已创建的 autoload 可以仍为新版，而后加载管理页的静态签名来自旧 remap；清洁工程中模拟旧签名/新实例也能复现，因此不能只归因于编辑器缓存。调用方改以 Node 运行期方法信息检查返回契约，再动态调用并验证结果。真正的旧 void 实现拒绝执行，防止先写状态、再因没有返回值误报成功。四项专项回归、36 项状态检查及纯源码 23 项设置检查通过；实际旧包的针对性检查通过，完整设置回归仍有旧页面 Label 路径不匹配，未修改本机包。
+- Source / 来源: user | test
+- Date / 日期: 2026-10-15

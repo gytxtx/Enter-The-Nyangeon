@@ -304,3 +304,10 @@
 - Files / 涉及文件: `scenes/manager/item_weight_manager.gd`、`scenes/manager/upgrade_manager.gd`、`ui/UpgradeScreen.gd`、`tests/architecture_contract_checks.gd`。
 - Summary / 改动摘要: 记录用户明确选择的两项策略；其余架构故障的实现原理与验证入口见 `docs/ARCHITECTURE.md`、`docs/MOD_TESTING.md`，不在此逐次记流水。
 - Docs synced / 文档同步: `docs/SYSTEMS.md` §8、`docs/LEARNINGS.md` 对应条目、`docs/MOD_TESTING.md`。
+
+## 2026-10-15 — Mod 启停返回签名的旧包兼容修正
+- Correction / 修正: 新版源码声明 Dictionary 即可让管理页静态取返回值 → 用户报告实际解析仍将其视为 void；旧 PCK remap 可与运行期实例形成签名错配，管理页须检查运行期返回契约并动态调用（来源：user；根因验证：test）。
+- Files / 涉及文件: `script/mod_option.gd`、`tests/test_mod_option_api.py`。
+- Summary / 改动摘要: 修正旧签名解析失败；拒绝执行真正的旧 void 启停方法，保留现代保存失败反馈；本机 Mod 包保持原样。
+- Verified / 验证: 四项专项、36 项 Mod 状态及纯源码 23 项设置检查通过；真实旧包副本的针对性检查通过，带该包的完整设置检查仍受旧页签 Label 路径差异阻断。
+- Docs synced / 文档同步: `docs/ARCHITECTURE.md` §1.11、`docs/MOD_TESTING.md` §10、`docs/LEARNINGS.md` 对应条目。
