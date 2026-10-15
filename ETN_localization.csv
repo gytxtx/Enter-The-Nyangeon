@@ -140,3 +140,7 @@ mod_cancel,取消,Cancel,Cancelar,Hủy
 option_max_fps,帧率上限,Max Frame Rate,Limite de FPS,Giới hạn FPS
 fps_unlimited,无限制,Unlimited,Ilimitado,Không giới hạn
 option_physics_interp,物理插值,Physics Interpolation,Interpolação Física,Nội suy vật lý
+mod_state_load_failed,启停记录损坏，已全部停用；请重新选择,Mod settings could not be read. All mods are disabled; please select again.,Não foi possível ler as configurações. Todos os mods foram desativados; selecione novamente.,Không thể đọc thiết lập mod. Đã tắt tất cả mod; vui lòng chọn lại.
+mod_state_save_failed,启停设置保存失败，请重试,Could not save mod settings. Please try again.,Não foi possível salvar as configurações dos mods. Tente novamente.,Không thể lưu thiết lập mod. Vui lòng thử lại.
+operation_save_failed,保存失败，未扣款。请检查存储空间后重试。,Save failed. No currency was spent. Check storage and try again.,Falha ao salvar. Nenhuma moeda foi gasta. Verifique o armazenamento e tente novamente.,Lưu thất bại. Chưa trừ tiền. Hãy kiểm tra bộ nhớ và thử lại.
+operation_scene_failed,场景加载失败，请重试。,Scene could not be loaded. Please try again.,Não foi possível carregar a cena. Tente novamente.,Không thể tải màn chơi. Vui lòng thử lại.
