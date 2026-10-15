@@ -88,8 +88,10 @@ func yes_deal(event: InputEvent):
 		yes_anim.play("select_anim")
 		await yes_anim.animation_finished
 		if shop_card.cost <= PlayerData.player_pyroxenes:
-			add_item()
-			PlayerData.player_pyroxenes -= shop_card.cost
+			if not add_item():
+				yes_anim.play_backwards("select_anim")
+				open_button()
+				return
 			SoundManager.play_sfx("CoinSounds")
 			animation_player_2.play_backwards("confirm_anim")
 			await animation_player_2.animation_finished
@@ -104,8 +106,10 @@ func yes_deal(event: InputEvent):
 	
 	if event.is_action_pressed("shoot"):
 		if shop_card.cost <= PlayerData.player_pyroxenes:
-			add_item()
-			PlayerData.player_pyroxenes -= shop_card.cost
+			if not add_item():
+				yes_anim.play_backwards("select_anim")
+				open_button()
+				return
 			SoundManager.play_sfx("CoinSounds")
 			close_button()
 			animation_player_2.play_backwards("confirm_anim")
@@ -117,12 +121,11 @@ func yes_deal(event: InputEvent):
 		else:
 			GameEvents.emit_pyroxenes_not_enough("Arona")
 
-func add_item():
-	var group: Array = PlayerData.clothes_group.get(shop_card.id_name, [])
-	if !group.has(shop_card.id):
-		group.push_back(shop_card.id)
-		PlayerData.clothes_group[shop_card.id_name] = group
-		Game.save_playerdata()
+func add_item() -> bool:
+	if Game.purchase_unlock("clothes", shop_card):
+		return true
+	Game.show_operation_error("operation_save_failed")
+	return false
 
 func no_deal(event: InputEvent):
 	if event as InputEventScreenTouch and event.pressed:

@@ -215,17 +215,117 @@ func load_all_records_as_json(file_path: String) -> Array:
 func save_playerdata():
 	if _loading_playerdata:
 		return false
+	return _write_scene_data(_progress_snapshot())
+
+func _progress_snapshot() -> SceneData:
 	var playerdata = SceneData.new()
 	playerdata.save_version = SceneData.SAVE_VERSION
 	playerdata.player_pyroxenes = PlayerData.player_pyroxenes
-	playerdata.character = PlayerData.character
-	playerdata.group = PlayerData.group
-	playerdata.clothes_group = PlayerData.clothes_group
-	playerdata.now_clothes = PlayerData.now_clothes
-	playerdata.game_mode = PlayerData.game_mode
+	playerdata.character = PlayerData.character.duplicate(true)
+	playerdata.group = PlayerData.group.duplicate(true)
+	playerdata.clothes_group = PlayerData.clothes_group.duplicate(true)
+	playerdata.now_clothes = PlayerData.now_clothes.duplicate(true)
+	playerdata.game_mode = PlayerData.game_mode.duplicate(true)
 	playerdata.support_savedata = SceneData.support_progress(SupportData.support_data)
 	playerdata.game_support_id = SupportData.selected_support_id
-	return _write_scene_data(playerdata)
+	return playerdata
+
+# 先写完整候选快照；持久化成功后才公布余额和所有权，失败不改变内存。
+var _progress_commit_inflight: bool = false
+
+func purchase_unlock(kind: String, card: Resource) -> bool:
+	if card == null or _loading_playerdata or _progress_commit_inflight:
+		return false
+	var candidate := _progress_snapshot()
+	var cost: int
+	match kind:
+		"characters":
+			if not card is CharacterCard or card.id == "" or candidate.character.has(card.id):
+				return false
+			cost = card.cost
+			candidate.character.append(card.id)
+			if card.group != "" and not candidate.group.has(card.group):
+				candidate.group.append(card.group)
+		"clothes":
+			if not card is ClothesCard or card.id_name == "" or card.id == "":
+				return false
+			var owned: Array = candidate.clothes_group.get(card.id_name, [])
+			if owned.has(card.id):
+				return false
+			cost = card.cost
+			owned.append(card.id)
+			candidate.clothes_group[card.id_name] = owned
+		"supports":
+			if not card is SupportCard or card.support_id in ["", "null"] or candidate.support_savedata.has(card.support_id):
+				return false
+			cost = card.unlock_cost
+			candidate.support_savedata[card.support_id] = {"LV": 1, "exp": 0}
+		_:
+			return false
+	if cost < 0 or candidate.player_pyroxenes < cost:
+		return false
+	candidate.player_pyroxenes -= cost
+	return _commit_progress(candidate)
+
+func purchase_support_upgrade(stones: int) -> bool:
+	var card: SupportCard = SupportData.now_support
+	if _loading_playerdata or _progress_commit_inflight or card == null or stones <= 0 or stones > SupportData.get_upgrade_max_stones():
+		return false
+	var candidate := _progress_snapshot()
+	if not candidate.support_savedata.has(card.support_id) or candidate.player_pyroxenes < stones:
+		return false
+	var progress: Dictionary = candidate.support_savedata[card.support_id]
+	var old_level: int = progress.LV
+	progress.exp += SupportData.EXP_PER_PYROXENE * stones
+	while int(progress.LV) < card.max_lv and int(progress.exp) >= SupportData._total_exp_to_lv(int(progress.LV) + 1):
+		progress.LV += 1
+	candidate.player_pyroxenes -= stones
+	if not _commit_progress(candidate):
+		return false
+	if int(progress.LV) > old_level:
+		SupportData.emit_support_lv_up(progress.LV)
+	return true
+
+func _commit_progress(candidate: SceneData) -> bool:
+	_progress_commit_inflight = true
+	if not _write_scene_data(candidate):
+		_progress_commit_inflight = false
+		return false
+	_loading_playerdata = true
+	var old_balance: int = PlayerData.player_pyroxenes
+	var old_exp: int = SupportData.now_exp
+	var player_blocked := PlayerData.is_blocking_signals()
+	var support_blocked := SupportData.is_blocking_signals()
+	PlayerData.set_block_signals(true)
+	SupportData.set_block_signals(true)
+	PlayerData.character = candidate.character
+	PlayerData.group = candidate.group
+	PlayerData.clothes_group = candidate.clothes_group
+	SupportData.restore_progress(candidate.support_savedata, candidate.game_support_id)
+	if SupportData.now_support != null and candidate.support_savedata.has(SupportData.now_support.support_id):
+		var progress: Dictionary = candidate.support_savedata[SupportData.now_support.support_id]
+		SupportData.now_lv = progress.LV
+		SupportData.now_exp = progress.exp
+	PlayerData.player_pyroxenes = candidate.player_pyroxenes
+	PlayerData.set_block_signals(player_blocked)
+	SupportData.set_block_signals(support_blocked)
+	_loading_playerdata = false
+	if old_exp != SupportData.now_exp:
+		SupportData.exp_changed.emit()
+	if old_balance != PlayerData.player_pyroxenes:
+		PlayerData.pyroxenes_changed.emit()
+	_progress_commit_inflight = false
+	GameEvents.emit_check_data()
+	return true
+
+func show_operation_error(message_key: String) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.process_mode = Node.PROCESS_MODE_ALWAYS
+	dialog.dialog_text = tr(message_key)
+	dialog.confirmed.connect(dialog.queue_free)
+	dialog.canceled.connect(dialog.queue_free)
+	get_tree().root.add_child(dialog)
+	dialog.popup_centered()
 
 func _write_scene_data(playerdata: SceneData) -> bool:
 	return _save_store.save_data(playerdata)

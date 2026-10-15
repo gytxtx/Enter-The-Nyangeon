@@ -199,10 +199,10 @@ func open_main_menu():
 
 func unlock_support():
 	if PlayerData.player_pyroxenes >= now_support_card.unlock_cost:
-		PlayerData.player_pyroxenes -= now_support_card.unlock_cost
+		if not Game.purchase_unlock("supports", now_support_card):
+			Game.show_operation_error("operation_save_failed")
+			return
 		on_lock = false
-		SupportData.add_new_data(now_support_card)
-		Game.save_playerdata()
 		SoundManager.play_sfx("CoinCostSounds")
 		change_card()
 	else:

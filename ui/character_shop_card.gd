@@ -125,8 +125,10 @@ func yes_deal(event: InputEvent):
 		yes_anim.play("select_anim")
 		await yes_anim.animation_finished
 		if shop_card.cost <= PlayerData.player_pyroxenes:
-			add_character()
-			PlayerData.player_pyroxenes -= shop_card.cost
+			if not add_character():
+				yes_anim.play_backwards("select_anim")
+				open_button()
+				return
 			SoundManager.play_sfx("CoinSounds")
 			animation_player_2.play_backwards("confirm_anim")
 			await animation_player_2.animation_finished
@@ -141,8 +143,10 @@ func yes_deal(event: InputEvent):
 	
 	if event.is_action_pressed("shoot"):
 		if shop_card.cost <= PlayerData.player_pyroxenes:
-			add_character()
-			PlayerData.player_pyroxenes -= shop_card.cost
+			if not add_character():
+				yes_anim.play_backwards("select_anim")
+				open_button()
+				return
 			SoundManager.play_sfx("CoinSounds")
 			close_button()
 			animation_player_2.play_backwards("confirm_anim")
@@ -154,15 +158,11 @@ func yes_deal(event: InputEvent):
 		else:
 			GameEvents.emit_pyroxenes_not_enough("Arona")
 
-func add_character():
-	if !PlayerData.character.has(shop_card.id):
-		PlayerData.character.push_back(shop_card.id)
-		Game.save_playerdata()
-	if shop_card.group != "" and !PlayerData.group.has(shop_card.group):
-		PlayerData.group.push_back(shop_card.group)
-		Game.save_playerdata()
-	# 解锁后通知各处刷新（社团列表动态补建 / 角色卡过滤等）
-	GameEvents.emit_check_data()
+func add_character() -> bool:
+	if Game.purchase_unlock("characters", shop_card):
+		return true
+	Game.show_operation_error("operation_save_failed")
+	return false
 
 func no_deal(event: InputEvent):
 	if event as InputEventScreenTouch and event.pressed:

@@ -75,10 +75,9 @@ func get_player_pyroxenes():
 func add_support_upgrade():
 	var n = min(int(h_slider.value), SupportData.get_upgrade_max_stones())
 	if n > 0 and PlayerData.player_pyroxenes >= n and SupportData.now_lv > 0:
-		PlayerData.player_pyroxenes -= n
-		SupportData.now_exp += SupportData.EXP_PER_PYROXENE * n
-		SupportData.save_data()
-		SupportData.check_upgrade()
+		if not Game.purchase_support_upgrade(n):
+			Game.show_operation_error("operation_save_failed")
+			return
 		get_player_pyroxenes()
 		SoundManager.play_sfx("CoinCostSounds")
 	else:
