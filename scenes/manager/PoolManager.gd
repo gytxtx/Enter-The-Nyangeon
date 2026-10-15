@@ -58,7 +58,7 @@ const FX_BASE_MS := {
 	&"floor_paint": 80,
 }
 var _fx_last_ms: Dictionary = {}
-var _fx_body_last_ms: Dictionary = {}
+const FX_TIMESTAMPS_META := &"_etn_fx_timestamps"
 
 var buff_box: Node
 
@@ -388,12 +388,7 @@ func fx_allowed_body(category: StringName, body: Node, base_ms: int = -1) -> boo
 	var interval: int = _fx_interval_ms(base)
 	if interval <= 0:
 		return true
-	var key: String = "%s:%d" % [category, body.get_instance_id()]
-	var now: int = Time.get_ticks_msec()
-	if now - int(_fx_body_last_ms.get(key, -1000000000)) < interval:
-		return false
-	_fx_body_last_ms[key] = now
-	return true
+	return _body_fx_allowed(body, "fx:" + str(category), interval)
 
 # 受击闪白（独立设置 Game.hit_flash_freq，按实体，与 effect_freq 解耦）。true=允许闪。
 func hit_flash_allowed(body: Node) -> bool:
@@ -405,11 +400,16 @@ func hit_flash_allowed(body: Node) -> bool:
 	if m <= 0:
 		return false
 	var interval: int = HIT_FLASH_BASE_MS * m * _fx_fps_mult()
-	var key: String = "hit_flash_white:%d" % body.get_instance_id()
+	return _body_fx_allowed(body, "hit_flash_white", interval)
+
+# 记录随节点释放；分类仍独立，池化复用同一节点时保留原有节流语义。
+func _body_fx_allowed(body: Node, key: String, interval: int) -> bool:
+	var timestamps: Dictionary = body.get_meta(FX_TIMESTAMPS_META, {})
 	var now: int = Time.get_ticks_msec()
-	if now - int(_fx_body_last_ms.get(key, -1000000000)) < interval:
+	if now - int(timestamps.get(key, -1000000000)) < interval:
 		return false
-	_fx_body_last_ms[key] = now
+	timestamps[key] = now
+	body.set_meta(FX_TIMESTAMPS_META, timestamps)
 	return true
 
 # 跟随类是否允许：同一 body 已有该类 FX 在飞则跳过（防叠加），再走每 body 间隔。
