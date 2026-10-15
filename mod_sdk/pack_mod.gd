@@ -29,6 +29,10 @@ func _initialize() -> void:
 		quit(1)
 		return
 	var count := _add_dir(pck, src, "res://mods/%s" % id, "")
+	if count <= 0:
+		push_error("pack source missing, empty or unreadable")
+		quit(1)
+		return
 	err = pck.flush()
 	if err != OK:
 		push_error("flush failed: %s" % err)
@@ -42,7 +46,7 @@ func _add_dir(pck: PCKPacker, root_abs: String, res_prefix: String, rel: String)
 	var dir_abs := root_abs if rel == "" else root_abs.path_join(rel)
 	var d := DirAccess.open(dir_abs)
 	if d == null:
-		return 0
+		return -1
 	var n := 0
 	d.list_dir_begin()
 	var name := d.get_next()
@@ -52,13 +56,17 @@ func _add_dir(pck: PCKPacker, root_abs: String, res_prefix: String, rel: String)
 			continue
 		var child_rel := name if rel == "" else rel.path_join(name)
 		if d.current_is_dir():
-			n += _add_dir(pck, root_abs, res_prefix, child_rel)
+			var added := _add_dir(pck, root_abs, res_prefix, child_rel)
+			if added < 0:
+				return -1
+			n += added
 		else:
 			var target := res_prefix.path_join(child_rel.replace("\\", "/"))
 			var source := root_abs.path_join(child_rel)
 			var e := pck.add_file(target, source)
 			if e != OK:
 				push_error("add_file failed (%s): %s" % [e, source])
+				return -1
 			else:
 				n += 1
 		name = d.get_next()

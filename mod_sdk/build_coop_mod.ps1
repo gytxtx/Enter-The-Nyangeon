@@ -17,8 +17,10 @@ param(
     [string]$Source = "",
     [switch]$Install
 )
-# Godot 在 stderr 输出 warning（如 ObjectDB leak）不应中断脚本；显式 throw 仍会终止。
-$ErrorActionPreference = "Continue"
+# Godot 输出由共用构建契约分类；退出资源计数之外的错误会终止构建。
+$ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "build_common.ps1")
+Assert-ModId -ModId $ModId
 $utf8 = New-Object System.Text.UTF8Encoding($false)
 
 if ($Source -eq "") {
@@ -45,7 +47,8 @@ if ($manifest -and ($manifest.PSObject.Properties.Name -contains 'replace_paths'
 $outDir = Join-Path $PSScriptRoot "coop_mod\build"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $pck = Join-Path $outDir "$ModId.pck"
-if (Test-Path -LiteralPath $pck) { Remove-Item -Force $pck }
+$buildPck = Join-Path $outDir "$ModId.building.pck"
+if (Test-Path -LiteralPath $buildPck) { Remove-Item -LiteralPath $buildPck -Force }
 
 # 编辑器镜像（res://mods/<id>）：编辑器会扫描并生成 .uid，源目录在 .gdignore 下不会。
 $mirror = Join-Path $Project "mods\$ModId"
@@ -129,17 +132,17 @@ if ($replaceFiles) {
     Write-Host "已生成 export_files：$($exportFiles.Count) 个文件（含 $($replacePaths.Count) 个本体替换）"
 
     Write-Host "导出 pck（preset: ModPackReplace）：$pck"
-    & $Godot --headless --path $Project --export-pack ModPackReplace $pck 2>&1 | ForEach-Object { $_ }
-    if (-not (Test-Path -LiteralPath $pck)) { throw "导出失败：未生成 $pck（确认已注入 ModPackReplace 预设，且导出时编辑器已关闭）" }
+    Invoke-CheckedGodot -Godot $Godot -Arguments @('--headless', '--path', $Project, '--export-pack', 'ModPackReplace', $buildPck)
 } else {
     Write-Host "打包 pck（PCKPacker）：$pck"
     $packer = Join-Path $PSScriptRoot "pack_mod.gd"
-    & $Godot --headless --path $Project --script $packer -- `
-        "--mod-source=$Source" "--out=$pck" "--mod-id=$ModId" 2>&1 | ForEach-Object { $_ }
-    if (-not (Test-Path -LiteralPath $pck)) { throw "打包失败：未生成 $pck" }
+    Invoke-CheckedGodot -Godot $Godot -Arguments @('--headless', '--path', $Project, '--script', $packer, '--', "--mod-source=$Source", "--out=$buildPck", "--mod-id=$ModId") -Marker 'PACK_MOD:'
 }
+Complete-ModPack -Godot $Godot -Project $Project -Candidate $buildPck -Destination $pck
 
 $stage = Join-Path $outDir $ModId
+$stage = [IO.Path]::GetFullPath($stage)
+if (-not $stage.StartsWith([IO.Path]::GetFullPath($outDir).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "暂存目录越界" }
 if (Test-Path -LiteralPath $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item (Join-Path $Source "mod.json") (Join-Path $stage "mod.json")
@@ -149,8 +152,10 @@ if (Test-Path -LiteralPath (Join-Path $Source "icon.png")) {
 }
 
 $zip = Join-Path $outDir "$ModId.zip"
-if (Test-Path -LiteralPath $zip) { Remove-Item -Force $zip }
-Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip
+$candidateZip = Join-Path $outDir "$ModId.building.zip"
+if (Test-Path -LiteralPath $candidateZip) { Remove-Item -LiteralPath $candidateZip -Force }
+Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $candidateZip
+Move-Item -LiteralPath $candidateZip -Destination $zip -Force
 Write-Host "已生成：$zip"
 
 # 版本化归档：etn_coop_<version>.zip（对齐既有分发命名）

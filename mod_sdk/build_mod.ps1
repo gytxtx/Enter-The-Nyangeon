@@ -5,6 +5,8 @@
     [Parameter(Mandatory = $true)][string]$ModId
 )
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "build_common.ps1")
+Assert-ModId -ModId $ModId
 
 $proj = (Resolve-Path -LiteralPath $Project).Path
 $modDir = Join-Path $proj "mods\$ModId"
@@ -16,7 +18,8 @@ $outDir = Join-Path $proj "build"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 
 $pck = Join-Path $outDir "$ModId.pck"
-if (Test-Path $pck) { Remove-Item -Force $pck }
+$buildPck = Join-Path $outDir "$ModId.building.pck"
+if (Test-Path -LiteralPath $buildPck) { Remove-Item -LiteralPath $buildPck -Force }
 
 # ---------- 覆盖构建：自动生成 ModPackReplace 的 export_files（mod 目录全部 + replace_paths） ----------
 if ($Preset -eq "ModPackReplace") {
@@ -86,11 +89,13 @@ if ($Preset -eq "ModPackReplace") {
 }
 
 Write-Host "导出 pck（preset: $Preset）..."
-& $Godot --headless --path $proj --export-pack $Preset $pck
-if (-not (Test-Path $pck)) { throw "导出失败，未生成 $pck（确认存在名为 $Preset 的导出预设）" }
+Invoke-CheckedGodot -Godot $Godot -Arguments @('--headless', '--path', $proj, '--export-pack', $Preset, $buildPck)
+Complete-ModPack -Godot $Godot -Project $proj -Candidate $buildPck -Destination $pck
 
 $stage = Join-Path $outDir $ModId
-if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
+$stage = [IO.Path]::GetFullPath($stage)
+if (-not $stage.StartsWith([IO.Path]::GetFullPath($outDir).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { throw "暂存目录越界" }
+if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $stage | Out-Null
 Copy-Item (Join-Path $modDir "mod.json") (Join-Path $stage "mod.json")
 Copy-Item $pck (Join-Path $stage "$ModId.pck")
@@ -99,6 +104,8 @@ if (Test-Path (Join-Path $modDir "icon.png")) {
 }
 
 $zip = Join-Path $outDir "$ModId.zip"
-if (Test-Path $zip) { Remove-Item -Force $zip }
-Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip
+$candidateZip = Join-Path $outDir "$ModId.building.zip"
+if (Test-Path -LiteralPath $candidateZip) { Remove-Item -LiteralPath $candidateZip -Force }
+Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $candidateZip
+Move-Item -LiteralPath $candidateZip -Destination $zip -Force
 Write-Host "已生成：$zip"

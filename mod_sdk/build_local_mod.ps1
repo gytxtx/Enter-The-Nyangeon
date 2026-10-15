@@ -20,8 +20,10 @@ param(
     [string]$Project = "H:\Enter The Nyangeon",
     [switch]$Install
 )
-# Godot 会往 stderr 输出 warning（ObjectDB leak 等），不应中断脚本；失败由后续文件检查显式 throw。
-$ErrorActionPreference = "Continue"
+# Godot 输出由共用构建契约分类；退出资源计数之外的错误会终止构建。
+$ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot "build_common.ps1")
+Assert-ModId -ModId $ModId
 
 $proj = (Resolve-Path -LiteralPath $Project).Path
 $src = Join-Path $proj "mods\$ModId"
@@ -33,12 +35,13 @@ if (-not (Test-Path -LiteralPath (Join-Path $src "mod.json"))) {
 $outDir = Join-Path $proj "mods\_build"
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 $pck = Join-Path $outDir "$ModId.pck"
-if (Test-Path -LiteralPath $pck) { Remove-Item -Force $pck }
+$buildPck = Join-Path $outDir "$ModId.building.pck"
+if (Test-Path -LiteralPath $buildPck) { Remove-Item -LiteralPath $buildPck -Force }
 
 $packer = Join-Path $PSScriptRoot "pack_mod.gd"
 Write-Host "打包 pck（PCKPacker）：$pck"
-& $Godot --headless --path $proj --script $packer -- "--mod-source=$src" "--out=$pck" "--mod-id=$ModId" 2>&1 | ForEach-Object { $_ }
-if (-not (Test-Path -LiteralPath $pck)) { throw "打包失败：未生成 $pck" }
+Invoke-CheckedGodot -Godot $Godot -Arguments @('--headless', '--path', $proj, '--script', $packer, '--', "--mod-source=$src", "--out=$buildPck", "--mod-id=$ModId") -Marker 'PACK_MOD:'
+Complete-ModPack -Godot $Godot -Project $proj -Candidate $buildPck -Destination $pck
 
 if ($Install) {
     $dest = Join-Path $env:APPDATA "Godot\app_userdata\Enter The Nyangeon\mods\$ModId"
