@@ -107,7 +107,10 @@ func boss_spawn():
 func enemy_spawn():
 	var ran = RandomNumberGenerator.new()
 	var cells: Array = tilemap.get_used_cells(0)
-	var cell_count: int = cells.size()
+	var positions := _spawn_positions(cells, _ensure_player())
+	# 先确认位置可行，再申请 pending 名额；空地图或全在安全距离内直接跳过。
+	if positions.is_empty():
+		return
 	for i in enemy.size():
 		if enemy_spawn_time_copy[i] <= 0:
 			for n in floor(enemy_spawn_num[i] + (time_mult * time_mult * num_mult)) * round_mult:
@@ -120,14 +123,7 @@ func enemy_spawn():
 				if not PoolManager.try_claim_spawn(enemy_temp.id):
 					break
 				
-				var rand_position_num = ran.randi_range(0, cell_count) - 1
-				var rand_position = tilemap.map_to_local(cells[rand_position_num])
-				
-				var p := _ensure_player()
-				if p != null:
-					while rand_position.distance_to(p.position) < 170:
-						rand_position_num = ran.randi_range(0, cell_count) - 1
-						rand_position = tilemap.map_to_local(cells[rand_position_num])
+				var rand_position: Vector2 = positions[ran.randi_range(0, positions.size() - 1)]
 				
 				var spawn_anim = PoolManager.get_pool("spawn_anim")
 				if spawn_anim == null or spawn_anim.is_idle == 0:
@@ -141,6 +137,14 @@ func enemy_spawn():
 				spawn_anim.enemy_spawn_anim(enemy_temp)
 				GameEvents.emit_enemy_spawn()
 			enemy_spawn_time_copy[i] = enemy_spawn_time[i] * mode_mult
+
+func _spawn_positions(cells: Array, local_player: Node) -> Array[Vector2]:
+	var positions: Array[Vector2] = []
+	for cell in cells:
+		var point: Vector2 = tilemap.map_to_local(cell)
+		if local_player == null or point.distance_to(local_player.position) >= 170.0:
+			positions.append(point)
+	return positions
 
 func _on_enemy_spawn_cd_time_timeout():
 	if can_spawn == false:

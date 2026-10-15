@@ -17,7 +17,13 @@ class AliasMethod:
 		# 1. 归一化权重
 		var sum = 0.0
 		for w in weights:
+			if not is_finite(w) or w < 0.0:
+				n = 0
+				return
 			sum += w
+		if n == 0 or not is_finite(sum) or sum <= 0.0:
+			n = 0
+			return
 		
 		var normalized = []
 		for w in weights:
@@ -65,6 +71,8 @@ class AliasMethod:
 			probabilities[s] = 1.0
 	
 	func next_index() -> int:
+		if n == 0:
+			return -1
 		var i = randi() % n
 		var r = randf()
 		

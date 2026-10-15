@@ -24,6 +24,8 @@ var tag_3: String = ""
 var item_pool: Array[AbilityUpgrade] = []
 var weighted_random: WeightedRandomSystem.AliasMethod
 var is_pool_built: bool = false
+var _available_items: Array[AbilityUpgrade] = []
+var _available_weights: Array[float] = []
 
 # 池配置
 @export_category("池配置")
@@ -149,6 +151,7 @@ func add_upgrade_card():
 	upgrade_screen_instance.set_ability_upgrades(chosen_upgrades as Array[AbilityUpgrade])
 	upgrade_screen_instance.upgrade_selected.connect(on_upgrade_selected)
 	upgrade_screen_instance.upgrade_reselect.connect(add_upgrade_card)
+	upgrade_screen_instance.can_refresh = can_offer_upgrades
 
 func apply_upgrade(upgrade:AbilityUpgrade):
 
@@ -174,6 +177,8 @@ func apply_upgrade(upgrade:AbilityUpgrade):
 			var scene = load(scene_path)
 			if scene != null:
 				var up_item = scene.instantiate()
+				if up_item is EquipItem:
+					up_item.item_id = str(upgrade.id)
 				player.add_child(up_item)
 			else:
 				push_warning("[upgrade_manager] 缺少道具场景：%s" % scene_path)
@@ -234,22 +239,34 @@ func tag_sort():
 # 构建道具池
 func build_pool(context: Dictionary = {}):
 	item_pool.clear()
+	_available_items.clear()
+	_available_weights.clear()
 	
 	# 计算所有道具的权重
 	var items: Array[AbilityUpgrade] = []
 	var weights: Array[float] = []
 	
+	var seen := {}
 	for item in upgrade_pool:
+		if item == null or seen.has(item.id):
+			continue
 		var weight = weight_manager.calculate_item_weight(item, context)
-		if weight > 0:
+		if is_finite(weight) and weight > 0:
 			items.append(item)
 			weights.append(weight)
+			seen[item.id] = true
+	_available_items = items
+	_available_weights = weights
+	is_pool_built = true
+	if items.is_empty():
+		weighted_random = null
+		return
 	
 	# 构建权重随机系统
 	weighted_random = WeightedRandomSystem.AliasMethod.new(weights)
 	
 	# 填充池子
-	for i in range(pool_size):
+	for i in range(maxi(1, pool_size)):
 		var index = weighted_random.next_index()
 		item_pool.append(items[index])
 	
@@ -259,9 +276,6 @@ func build_pool(context: Dictionary = {}):
 func get_triple_choice(context: Dictionary = {}) -> Array[AbilityUpgrade]:
 	if not is_pool_built:
 		build_pool(context)
-	if item_pool.size() < 3:
-		push_error("Item pool too small!")
-		return []
 	var options: Array[AbilityUpgrade] = []
 	options = get_random_options()
 	return options
@@ -270,21 +284,47 @@ func get_triple_choice(context: Dictionary = {}) -> Array[AbilityUpgrade]:
 func get_random_item_from_pool() -> AbilityUpgrade:
 	if item_pool.size() == 0:
 		build_pool()
+	if item_pool.is_empty():
+		return null
 	
 	return item_pool[randi() % item_pool.size()]
 
 # 简单随机选项（备用）
 func get_random_options() -> Array[AbilityUpgrade]:
 	var options: Array[AbilityUpgrade] = []
-	var attempts = 0
-	
-	while options.size() < 3 and attempts < 100:
-		var item = get_random_item_from_pool()
-		if not options.has(item):
-			options.append(item)
-		attempts += 1
-	
+	# 保留抽样池的概率近似；去重后不足时，从原始正权重候选补足，不复活禁用项。
+	var candidates: Array[AbilityUpgrade] = []
+	var weights: Array[float] = []
+	for item in item_pool:
+		var index := candidates.find(item)
+		if index == -1:
+			candidates.append(item)
+			weights.append(1.0)
+		else:
+			weights[index] += 1.0
+	while options.size() < 3:
+		if candidates.is_empty():
+			for i in _available_items.size():
+				if not options.has(_available_items[i]):
+					candidates.append(_available_items[i])
+					weights.append(_available_weights[i])
+		if candidates.is_empty():
+			break
+		var index := WeightedRandomSystem.AliasMethod.new(weights).next_index()
+		if index < 0:
+			break
+		options.append(candidates[index])
+		candidates.remove_at(index)
+		weights.remove_at(index)
 	return options
+
+func can_offer_upgrades() -> bool:
+	for item in upgrade_pool:
+		if item != null:
+			var weight := weight_manager.calculate_item_weight(item, get_current_context())
+			if is_finite(weight) and weight > 0.0:
+				return true
+	return false
 
 # 更新权重管理器状态
 func update_weight_manager_state():

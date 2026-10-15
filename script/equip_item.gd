@@ -19,7 +19,8 @@ var player: Node:
 		_player = value
 
 func _ready() -> void:
-	item_id = _get_item_id()
+	if item_id.is_empty():
+		item_id = _get_item_id()
 	_on_equip()
 	_apply_effect(1)
 	_setup()

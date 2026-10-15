@@ -2,6 +2,8 @@ extends CanvasLayer
 
 signal upgrade_selected(upgrade:AbilityUpgrade)
 signal upgrade_reselect
+var can_refresh: Callable = Callable()
+var _choice_count: int = 0
 
 var coin_cost: int = 0
 var player: Node
@@ -91,11 +93,9 @@ func joy_select(event: InputEvent):
 	
 	if can_joy:
 		can_joy = false
-		if !card_container.get_children().is_empty():
-			joy_box.clear()
-			joy_box = card_container.get_children()
-			joy_box.append(refresh)
-			joy_box.append(next)
+		joy_box = card_container.get_children()
+		joy_box.append(refresh)
+		joy_box.append(next)
 		
 		if !joy_box.is_empty():
 			if joy_box[0] == null:
@@ -147,6 +147,8 @@ func close_mouse():
 	$%Next.mouse_filter = 2
 
 func set_ability_upgrades(upgrades: Array[AbilityUpgrade]):
+	_choice_count = upgrades.size()
+	refresh.modulate.a = 1.0 if _choice_count > 0 else 0.35
 	var delay: float = 0
 	for upgrade in upgrades:
 		var card_instance = upgrade_card_scene.instantiate()
@@ -201,6 +203,8 @@ func on_refresh(event: InputEvent):
 func refresh_button():
 	player = PlayerRef.ensure(self, player)
 	if _closed:
+		return
+	if _choice_count == 0 or (can_refresh.is_valid() and not bool(can_refresh.call())):
 		return
 	if player != null and player.stats.usable_coin < coin_cost:
 		$Node2D3/Refresh/AnimationPlayer.play("coin_lack")

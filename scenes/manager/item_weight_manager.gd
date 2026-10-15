@@ -49,7 +49,7 @@ func initialize_default_weights():
 			AbilityUpgrade.ItemType.FIRE: 1.0,
 			AbilityUpgrade.ItemType.POISON: 1.0,
 			AbilityUpgrade.ItemType.COLD: 1.0,
-			AbilityUpgrade.ItemType.DEFENSE: 0.0,
+			AbilityUpgrade.ItemType.DEFENSE: 1.0,
 			AbilityUpgrade.ItemType.HEALTH: 1.0,
 			AbilityUpgrade.ItemType.GROWTH: 1.0,
 			AbilityUpgrade.ItemType.SUMMON: 1.0,
@@ -70,7 +70,7 @@ func calculate_item_weight(item: AbilityUpgrade, context: Dictionary = {}) -> fl
 	var tag_weight_sum = 0.0
 	var tag_count = 0
 	
-	for tag in item.item_tags:
+	for tag in item.get_tag_list():
 		var tag_weight = tag_weights.get(tag, 1.0)
 		tag_weight_sum += tag_weight
 		tag_count += 1
