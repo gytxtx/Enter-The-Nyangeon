@@ -39,7 +39,7 @@
 - [ ] **便携目录**：把 `<id>.pck` + `mod.json` 放到 **exe 同目录 `mods/<id>/`**，启动后同样加载。
 - [ ] **优先级**：同 id 同时存在于 `user://mods/` 与 exe 同目录时，`user://` 胜（看日志告警）。
 - [ ] **覆盖场景**：用 `ModPackReplace` 预设构建（`setup_mod_project.ps1 -Replace` + `build_mod.ps1 -Preset ModPackReplace`，`mod.json` 置 `replace_files=true`）覆盖 `res://scenes/main/main.tscn` 后，进入战斗用的是 mod 版本。
-- [ ] **卸载**：MOD 页签选中一个 mod → 点「卸载」→ 二次确认 → 列表移除；**重启后** `user://mods/<id>/` 已删除、`mods_state.json` 无该 id、内容（角色/社团）消失。
+- [ ] **卸载**：MOD 页签选中一个 mod → 点「卸载」→ 二次确认 → 列表移除；**重启后** `user://mods/<id>/` 已删除、`mods_state.json` 保留该 id 的 false 墓碑、内容（角色/社团）消失。目录删除失败时墓碑也须保留，调整其他 Mod 不得将其丢弃；启停状态保存失败则不开始删除并显示错误。
 - [ ] **卸载占用**：运行中 pck 被占用 / 便携目录只读导致删不掉时 → 提示「下次启动删除」；**重启后**目录确实被清除（`user://mods/.pending_uninstall.json` 已清空）。
 
 ## 3. Android 真机
@@ -117,3 +117,10 @@
 - Android `shader_baker` 与 mod 自定义 shader。
 - 单 exe 内嵌 pck 下 `load_resource_pack` 叠加。
 - pck 必须与引擎版本 `4.7` 匹配。
+
+
+## 10. Architecture guards / 架构契约回归（2026-10-15）
+
+- `python tests/run_architecture_checks.py --godot <Godot路径>`：隔离 `user://`，76 项本体/Mod 边界检查；`--project <工程副本>` 可指向已准备好的测试工程。
+- `python -m unittest discover -s tests -p test_build_contract.py -v`：三个入口各 4 种失败，共 12 个拒绝组合，以及三个真实 PCK 构建/结构校验；不安装到玩家目录。
+- 仍需配合 `run_persistence_checks.py`、`run_support_persistence_checks.py`、`run_ui_ux_checks.py`、`run_coop_recovery_checks.py` 等现有回归。原工程有本地 `godot_ai` 配置时，使用移除该工具配置的独立副本，不修改原 `project.godot`。本轮不是冷导入或真机通关。

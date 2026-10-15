@@ -1,6 +1,6 @@
 # Example Mod / 示例 mod
 
-最小可安装角色 mod 源。`example/` 就是工程 `mods/<id>/` 的内容：
+最小可安装角色 mod 源。`mods/example/` 就是工程 `mods/<id>/` 的内容：
 
 ```
 example/
@@ -14,7 +14,7 @@ example/
 
 1. 准备一份**本体工程副本**（版本与本体对齐）。
 2. 运行 `mod_sdk/setup_mod_project.ps1 -Project <副本>` 注入 `ModPack` 预设。
-3. 把本目录的 `example/` 拷到 `<副本>/mods/example/`。
+3. 把本目录的 `mods/example/` 拷到 `<副本>/mods/example/`。
 4. 运行 `mod_sdk/build_mod.ps1 -Godot <godot> -Project <副本> -ModId example` → 生成 `build/example.zip`。
 5. 游戏内 **MOD** 面板导入该 zip，重启。
 

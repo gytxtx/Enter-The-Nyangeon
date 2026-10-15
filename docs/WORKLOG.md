@@ -296,3 +296,11 @@
 - Systems / 影响系统: 官方联机道具纯视觉同步。
 - Docs synced / 文档同步: `docs/ARCHITECTURE.md` §1.13、`docs/LEARNINGS.md`、`mod_sdk/coop_mod/README.md`。
 - Verified / 验证: 独立主线候选工作区从当前源码打包，LAN / Relay 双端道具回归通过，包含房主道具缓存迁移断言；精确豁免主线缺失本地开发插件的三条加载日志及既有退出资源计数，其余 SCRIPT ERROR / ERROR 严格判失败。日志位于本地 `.godot/items_only_final/` 与 `.godot/items_only_final_relay/`。
+
+
+## 2026-10-15 — 升级权重与候选不足策略裁定
+- Correction / 修正: 默认 DEFENSE=0，修位掩码遍历后的平衡未定 → 默认 DEFENSE=1，枚举真实标签并保留回合、刷新及低血防御增益（来源：user）。
+- Correction / 修正: 唯一候选不足三项时行为未定 → 显示现有唯一项；零项可继续且不收刷新费（来源：user）。
+- Files / 涉及文件: `scenes/manager/item_weight_manager.gd`、`scenes/manager/upgrade_manager.gd`、`ui/UpgradeScreen.gd`、`tests/architecture_contract_checks.gd`。
+- Summary / 改动摘要: 记录用户明确选择的两项策略；其余架构故障的实现原理与验证入口见 `docs/ARCHITECTURE.md`、`docs/MOD_TESTING.md`，不在此逐次记流水。
+- Docs synced / 文档同步: `docs/SYSTEMS.md` §8、`docs/LEARNINGS.md` 对应条目、`docs/MOD_TESTING.md`。

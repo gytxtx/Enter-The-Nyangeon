@@ -415,7 +415,7 @@
 - Notes / 说明: Resource 反序列化只填充脚本仍声明的属性，未声明者被丢弃（无警告）——所以**改名/删除存档字段是破坏性变更**：改名前须在迁移期按旧名读取再写新名，删除前确认确为冗余。`SceneData.save_version` 默认值必须是 **0** 而非当前版本：旧档无该字段会解析为默认值，若默认=当前版本则旧档被误判为最新、永久跳过迁移。`save_playerdata` 采用「临时文件 → 备份旧档 `.bak` → 替换」的原子写，避免写坏唯一存档。
 - Source / 来源: code + test
 - Date / 日期: 2026-10-04
-- SUPERSEDED: 2026-10-13 仅修正末句“原子写”的可靠性结论：当前是两次 rename，无失败回滚或备份加载；损坏主档还会在首次货币变化时覆盖有效 `.bak`。字段迁移结论仍有效。隔离复现见根 `CODEBASE_AUDIT.md` 的 AUD-SAVE-001，准确流程已更新 `ARCHITECTURE.md` §2（来源：test）。
+- SUPERSEDED: 2026-10-13 仅修正末句“原子写”的可靠性结论：当前是两次 rename，无失败回滚或备份加载；损坏主档还会在首次货币变化时覆盖有效 `.bak`。字段迁移结论仍有效。隔离复现见历史审查编号 AUD-SAVE-001，准确流程已更新 `ARCHITECTURE.md` §2（来源：test）。
 - SUPERSEDED: 2026-10-13 本轮已修复恢复/写入路径：`scene_data_store.gd:15,41` 验证主档后读取备份，只轮换有效主档，不先移走主路径；双坏档/未来版本禁止自动覆盖。7 类回归通过。原字段迁移结论保留（来源：test）。
 
 ### [UI] 升级卡/道具卡文本只来自 `id` 派生的翻译 key，不读 `AbilityUpgrade` 文本字段
@@ -2129,14 +2129,14 @@
 
 
 ### [Mod] ZIP 中存在 PCK 条目不等于安装成功；重装失败不会自动保留旧包
-- Evidence / 证据: `script/mod_manager.gd:1241,1255,1259`、`script/mod_option.gd:457`；根 `CODEBASE_AUDIT.md` AUD-MOD-001。
+- Evidence / 证据: `script/mod_manager.gd:1241,1255,1259`、`script/mod_option.gd:457`；历史审查编号 `AUD-MOD-001`。
 - Notes / 说明: 当前导入先清旧目录，文件打开失败时跳过但仍返回 `ok=true`。隔离探针先安装真实 PCK，再用 PCK 同路径目录/文件冲突包重装，结果提示成功却无 PCK。需要先暂存并完整校验，再交换目录；修复前调用者不能把成功返回当作所有文件写入成功，也不能依赖失败回滚。
 - Source / 来源: test
 - Date / 日期: 2026-10-13
 - SUPERSEDED: 2026-10-13 本轮已改为 `mod_installer.gd:4` 的暂存/验证/交换事务，文件/目录冲突、写入/交换失败及超限明确失败并保留旧安装。真实已挂载 PCK 更新亦通过。旧“失败不保留旧包”仅描述修复前行为（来源：test）。
 
 ### [Testing] Godot 退出 0 与断言完成标记不能排除原生错误
-- Evidence / 证据: `tests/run_ui_ux_checks.py:98`、`tests/test_ui_ux_regressions.gd:127`；根 `CODEBASE_AUDIT.md` AUD-TEST-001。
+- Evidence / 证据: `tests/run_ui_ux_checks.py:98`、`tests/test_ui_ux_regressions.gd:127`；历史审查编号 `AUD-TEST-001`。
 - Notes / 说明: 两次隔离 UI 回归均 133 项断言通过、runner 退出 0，仍打印信号发射期间同步 `free()` 导致的原生 `ERROR:`。当前 runner 只检查 stderr 的 `SCRIPT ERROR:` 和 stdout 完成标记。错误检查应合并两条流，精确区分退出资源计数例外和真正错误；在动画信号恢复栈中拆除场景要延迟/队列释放并等待完成。此现象定位于测试拆除，不能直接当作正式 UI 故障。
 - Source / 来源: test
 - Date / 日期: 2026-10-13
@@ -2278,7 +2278,7 @@
 - Date / 日期: 2026-10-14
 
 ### [Relay] 可靠 WebSocket 连接不能在背压时跳整帧后继续工作
-- Evidence / 证据: `mod_sdk/coop_mod/server/relay_server.py:175-202`；`mod_sdk/coop_mod/mods/etn_coop/net/coop_relay_peer.gd:268`；`CODEBASE_AUDIT.md` AUD-NET-001。
+- Evidence / 证据: `mod_sdk/coop_mod/server/relay_server.py:175-202`；`mod_sdk/coop_mod/mods/etn_coop/net/coop_relay_peer.gd:268`；历史审查编号 `AUD-NET-001`。
 - Notes / 说明: 中继首两次超水位直接跳帧，水位恢复即清计数，不关闭连接。控制帧与可靠 RPC 共用此路径，客户端没有额外重传。真实发送函数配合可控 transport 水位，已复现控制帧丢失、下一游戏包仍发送；不能把“慢端不阻塞广播”视为可靠性已保证。修法需有界排队或明确断连；当前尚未实施。
 - Source / 来源: test
 - Date / 日期: 2026-10-14
@@ -2399,6 +2399,7 @@
 ### [Upgrade] 最高稀有度由回合曲线主导、刷新额外抬升；防御低血加成不随拥有数量归零
 - Evidence / 证据: `scenes/manager/upgrade_manager.tscn`（`round_weight_curve_3` 0.01→0.55，`curve1` 1→0.35，`curve2` 0.05→0.75）；`scenes/manager/upgrade_manager.gd:64-70`（回合基准权重）、`:132/139`（`refresh_mult=(1+x)*1.1-1`，稀有档×`(1+refresh_mult)`）、`:294`（`health_percent` 浮点）；`scenes/manager/item_weight_manager.gd:52`（`DEFENSE` 标签权重 0）、`:150-153`（`max(0, defense_bonus - defense_tag_quantity*0.3)` + 低血项）。
 - Notes / 说明: 用户裁定**升级权重按 PR 保留**。最高稀有度「早期回合抽不到、随回合推进才给权重」由 `round_weight_curve_3`（回合曲线）承担，PR 未改回合边界路径（`round_weight_upgrade`）；PR 只把刷新路径从 `curve3 * refresh_mult`（`refresh_mult` 初值 0、`*=1.1` 恒 0 → 稀有档归零）改为 `curve3 * (1 + refresh_mult)`，故刷新次数也会额外抬升稀有档（且无上限）。防御类由 `max(0, defense_bonus - 0.3×拥有数)` 随获取数量衰减回基准；PR 未改 `item_weight_manager.gd`（与 main 零差异），仅令低血旁路 `(2+now_round)*refresh_mult` 从恒 0 变为生效——该项是加法且与拥有数量无关。
+- SUPERSEDED: 2026-10-15 用户裁定枚举真实标签，并将默认 DEFENSE 从 0 改为 1，保留既有防御额外增益；本条回合稀有度曲线、刷新公式及低血加成结论继续有效。此次裁定优先于旧默认值描述。（来源：user）
 - Source / 来源: user
 - Date / 日期: 2026-10-14
 
@@ -2437,3 +2438,116 @@
 - Notes / 说明: 根因**未定位**。处理=保留 `Game.physics_interp` 设置项（默认关，Graphics 页 `RowPhysicsInterp` 可开，见 `9ffece1`），由玩家自行取舍；后续若要根治，优先评估 A（转 `CPUParticles2D`，射击栈粒子量小、代价可忽略）。**勿重复 B**。
 - Source / 来源: user + code
 - Date / 日期: 2026-10-14
+
+### [Mod/Install] 非空 PCK 不等于有效包，目录事务成功仍可能破坏可用旧安装
+- Evidence / 证据: `script/mod_installer.gd:35,48,56`；`script/mod_manager.gd:559`；历史审查编号 `AUD-MOD-004`。
+- Notes / 说明: 2026-10-15 隔离探针先建有效 PCK，再以相同 ID 导入非空垃圾 `broken pck`；返回 ok=true、旧包字节消失。原 AUD-MOD-001 的路径冲突/写入/交换失败回滚修复仍有效，本次缺口是交换前没有验证包可加载，下次启动才发现。不能将“所有文件成功写入”当作“Mod 更新可用”，也不能只检查 PCK 非空就删除旧安装。
+- SUPERSEDED: 2026-10-15 已在目录交换前加入 `mod_pack_validator.gd` 的只读结构/版本/范围/MD5 预检，垃圾、截断、越界、校验和损坏更新均失败且旧包完整保留；正常 v2/v3/v4 包通过，预检不挂载包。校验读量受包大小约束；加密/sparse/delta 不在安装契约内，脚本及玩法兼容性仍不由预检保证。AUD-MOD-004 resolved；守卫 `tests/mod_install_checks.gd`。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+### [Mod/State] 坏启停 JSON 被当作首次启动，会重新启用已停用的有效 Mod
+- Evidence / 证据: `script/mod_manager.gd:131,141,236,1318`；`script/mod_option.gd:446`；历史审查编号 `AUD-MOD-005`。
+- Notes / 说明: 状态直接 WRITE 覆盖且不回传失败；解析失败回退 {}，扫描时缺项默认 true。隔离探针保存停用后将文件截断为 `{`，再次扫描/挂载得到 enabled=true、mounted=true。坏档应区别于文件不存在，持久化失败也应能反馈 UI；当前实现未修。其他 JSON 直接写入点仅作同类检查线索，本次未分别复现。
+- SUPERSEDED: 2026-10-15 `mod_state_store.gd` 采用临时文件/重读/有效主档备份/替换；坏档或只剩备份时全停用并提示重新选择，显式选择可重建。测试确认旧备份可能为 true、最新主档为 false，因此不能自动采用旧备份启用清单。`set_enabled` 返回 `{ok,error?}`，失败恢复内存和 UI，不报重启生效；卸载保存 false 墓碑后才删目录，其他启停保存保留墓碑。36 项状态/UI 守卫通过，AUD-MOD-005 resolved。顺序和待卸载 JSON 的独立事务化仍非本次范围。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+### [Relay] 握手超时不能替代握手前的并发连接预算
+- Evidence / 证据: `mod_sdk/coop_mod/server/relay_server.py:597,633,657,725`；历史审查编号 `AUD-NET-004`。
+- Notes / 说明: 上限在完整 HTTP 头与升级响应后才检查/登记。设 MAX_TOTAL_CLIENTS=1，1 个 WebSocket 加 5 个残缺握手可同时保持 6 个 handler，登记仍为 1。10 秒超时只限制每次握手存续时间，不限制同时占用数；本机入口计数门实验能把活动 handler 限为 1，生产尚未修改。未做压力测试，不把预算绕过等同于已复现宕机。
+- SUPERSEDED: 2026-10-15 服务端在 HTTP 读取前非阻塞申请 `active_connections` 名额，包含握手、普通 HTTP、WebSocket 与关闭收尾；满额 HTTP 503 拒绝，finally 释放。20 项 Python 测试及 13 组联机恢复通过，AUD-NET-004 resolved。公网容量与压力测试边界不变；Windows 上立即拒绝与客户端发送交错时可能表现为 TCP reset，同样没有准入。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+### [Perf/FX] PoolManager 的实体节流字典不随节点或游戏局结束而清理
+- Evidence / 证据: `scenes/manager/PoolManager.gd:61,132,395,412,490`；`script/health_component.gd:146`；历史审查编号 `AUD-PERF-001`。
+- Notes / 说明: 释放 500 个调用过 hit_flash_allowed 的节点后记录数 500，clear_pool 后仍 500，再释放 500 个新节点变为 1000；记录跨 autoload 生命周期累积，只保留 key/时间戳而非节点本体。临时副本将记录置于节点的合法 metadata 名下的 Dictionary，保留重复抑制且不再累积全局记录；不能直接把 `hit_flash_white:<id>` 用作 metadata 名，冒号会触发 Invalid metadata identifier。生产实现未改，长期内存/帧耗时未测量。
+- SUPERSEDED: 2026-10-15 实现统一 `_body_fx_allowed`，分类时间戳放进实体 `_etn_fx_timestamps` 字典，移除全局实体 ID 字典。首次/重复/过期/分类独立/关闭设置/存活节点清池语义及 1000 个节点释放检查通过；LAN/Relay 道具和 UI 回归亦通过。AUD-PERF-001 resolved；长期帧耗时未做基准。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+
+### [Mod/Hooks] 首回合槽的允许语义不能直接复用接管钩子的任意 true 短路
+- Evidence / 证据: `scenes/main/main.gd:70`；`script/extension_hooks.gd:132,187`；官方 `net/coop_net.gd:2015`；历史审查编号 `AUD-ARCH-001`。
+- Notes / 说明: 无钩子启动决定 true；加入返回 false 的中性命名回调变 false；命名 true 可覆盖客机字段 false。只有首回合消费分支的探针，未跑第三方完整对局。应分别定义允许查询与接管组合规则，并兼容旧槽；本轮未修。
+- SUPERSEDED: 2026-10-15 新增 first_round_start_interceptor，统一 true=接管；should_start_first_round 保留旧字段 true=允许，旧命名链按接管组合。官方联机已迁移新槽。 守卫 `tests/architecture_contract_checks.gd`；AUD-ARCH-001 resolved。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+### [Mod/Patch] inherit 的注册键、资源身份和类型需要一起校验
+- Evidence / 证据: `script/mod_patch.gd:62`；`script/mod_manager.gd:726`；SDK `example_mod/mods/example/patches/example.json:3`；历史审查编号 `AUD-ARCH-002`。
+- Notes / 说明: 实际继承到 fixture_copy 后 Resource.id 仍为 fixture_base；跨 kind 把 AbilityUpgrade 继承到 characters 也返回成功。当前补丁只复用 ID 准入，不复用正常注册类型/场景校验。角色复制还必须处理场景根 player_card，不能只改资源 ID；本轮未修。
+- SUPERSEDED: 2026-10-15 候选资源深复制后校验；inherit 自动同步身份并拒绝跨 kind；拒绝直接改 ID、无效字段和 typed Array 元素；正常注册与补丁共用内容校验，失败不落表。 守卫 `tests/architecture_contract_checks.gd`；AUD-ARCH-002 resolved。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+### [Scene] tree_changed 不能证明切场成功或目标场景已初始化
+- Evidence / 证据: `script/GameEvents.gd:185,192,193`；历史审查编号 `AUD-ARCH-003`。
+- Notes / 说明: 请求不存在场景后协程等待，向 root 加入无关 Node 就使其完成，current_scene 仍为空。需要检查切场 Error，成功后等待 scene_changed 并验证目标和操作代次；本轮未修。
+- SUPERSEDED: 2026-10-15 预加载 PackedScene、消费 Error、等待 scene_changed；重叠请求串行且只完成最新代次。玩家入树并就绪后才发首回合；失败显示文案并恢复页面重试。联机按切场结果上报就绪。 守卫 `tests/architecture_contract_checks.gd`；AUD-ARCH-003 resolved。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+### [Pause] 配对的布尔 pause_lock 仍不能保护多个来源重叠持有
+- Evidence / 证据: `ui/pause_screen.gd:129`；`ui/cheat_menu.gd:66`；`script/GameEvents.gd:275`；历史审查编号 `AUD-ARCH-004`。
+- Notes / 说明: A true、B true、A false 后实际 _pause_locked=false；锁没有 owner/token。探针证明模型缺口，不代表所有 Boss 必然重叠。收口时须区分锁菜单、暂停共享世界和 LAN 本地菜单；本轮未修。
+- SUPERSEDED: 2026-10-15 GameEvents 按 owner+tag 聚合世界暂停和菜单锁；释放一个来源保留其他来源，失效持有者自动清理。本体 UI、Boss、回合与官方联机已迁移；LAN 菜单仍只冻结本地输入。 守卫 `tests/architecture_contract_checks.gd`；AUD-ARCH-004 resolved。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+### [Save] 单文件替换事务不能替代一次购买的业务事务
+- Evidence / 证据: `ui/character_shop_card.gd:127,157`；`ui/support_shop.gd:200`；`script/PlayerData.gd:13`；历史审查编号 `AUD-ARCH-005`。
+- Notes / 说明: 实际 add_character + 货币 setter 一次购买写三份快照。替身存储前两次成功、扣款保存失败后，成功快照有新角色和 100 货币，内存为 90，业务未处理失败。支援反向先扣款也存在提交窗口。应准备完整新状态并单次提交，保留文件事务；本轮未修。
+- SUPERSEDED: 2026-10-15 角色、服装、支援解锁及支援升级均先准备完整 SceneData、单次写入，成功后公布状态和信号；失败不扣款、不授予内容、不播成功结果，并显示错误文案。 守卫 `tests/architecture_contract_checks.gd`；AUD-ARCH-005 resolved。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+### [Build] 失败进程可以留下 PCK，文件存在不是构建成功条件
+- Evidence / 证据: `mod_sdk/build_mod.ps1:89`；`build_coop_mod.ps1:132`；`build_local_mod.ps1:40`。
+- Notes / 说明: 独立假工程用导出进程替身写 4 字节 PCK 后退出 42；真实 build_mod.ps1 仍退出 0 并生成 ZIP。安装预检会拒绝该包，问题在发行包装边界。需消费退出码/错误/完成标记，全部验证后发布；本轮未修。
+- SUPERSEDED: 2026-10-15 三个入口共用 build_common.ps1，检查退出码、错误、适用的完成标记及只读 PCK 结构校验；候选包通过后才替换正式 PCK，ZIP 也经候选文件发布；失败保留既有发行物。 守卫 `tests/architecture_contract_checks.gd` 及 `tests/test_build_contract.py`；AUD-ARCH-006 resolved。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+
+### [Upgrade/Tags] 位掩码 int 不能按整数范围枚举实际标签
+- Evidence / 证据: `scenes/manager/item_weight_manager.gd:73`；`resources/upgrades/ability_upgrade.gd:48`；历史审查编号 `AUD-ENG-001`。
+- Notes / 说明: 单 TRAJECTORY 配 0.25 实际 1；单 DEFENSE 配 0 实际约 0.99707；CONVERT 单标签迭代 65536 次。应按启用位读取；直接换循环会使默认 DEFENSE=0 真正归零，须尊重既有 user“权重按 PR 保留”裁定，不能仅凭本观察改默认值。本轮未修。
+- SUPERSEDED: 2026-10-15 按 get_tag_list 枚举启用位。用户裁定默认 DEFENSE 从 0 改为 1，保留回合、刷新和低血防御增益；自定义 0 权重仍可屏蔽纯防御道具。 守卫 `tests/architecture_contract_checks.gd`；AUD-ENG-001 resolved。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+### [Mod/Identity] 注册场景可换路径，但 EquipItem 默认身份仍来自 basename
+- Evidence / 证据: `script/equip_item.gd:21,31,37`；`script/mod_manager.gd:726`；`scenes/manager/upgrade_manager.gd:168`；历史审查编号 `AUD-ENG-002`。
+- Notes / 说明: fixture_boost 注册到 shared_effect.tscn 成功，实际 item_id=shared_effect，第二层未应用；手动绑定后得到 [1,2]。生成方应交付稳定身份，并处理 _ready 的覆盖及旧 _get_item_id 覆写兼容。本体 116 项同名只能掩盖此边界。本轮未修。
+- SUPERSEDED: 2026-10-15 UpgradeManager 在 add_child 前赋予 EquipItem 注册 ID；_ready 仅在空 ID 时走旧 basename/覆写回退。共享场景和任意文件名可以正确叠层。 守卫 `tests/architecture_contract_checks.gd`；AUD-ENG-002 resolved。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+### [Upgrade/Pool] 抽样容量不等于唯一候选数，空候选须在 AliasMethod 建表前判断
+- Evidence / 证据: `scenes/manager/upgrade_manager.gd:235,259,277`；`scenes/manager/weight_system.gd:68`；历史审查编号 `AUD-ENG-003`。
+- Notes / 说明: 空配置或全零权重均在建池中取模零/越界，后置 size 检查保护不到；1 个唯一候选可填容量30，最终选项仍只有1。少于三项的产品策略需显式约定；不能自动复活禁用内容或扣无效刷新费。本轮未修。
+- SUPERSEDED: 2026-10-15 建池前过滤空资源、非有限和非正权重；空 AliasMethod 返回 -1，空池安全返回。按 ID 去重，有效候选不足时显示现有项；零项仍可继续且刷新不收费，手柄可访问继续按钮。 守卫 `tests/architecture_contract_checks.gd`；AUD-ENG-003 resolved。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+### [Spawn] 不可行的距离约束会使同步随机重试无法结束
+- Evidence / 证据: `script/enemies_spawn.gd:107,128`；历史审查编号 `AUD-ENG-004`。
+- Notes / 说明: 单格、距玩家0的地图输入，真实 enemy_spawn 在170距离重试内无法返回，父进程4秒终止。只证明不可行输入下的活性缺口，不声称正式地图必现。改有界选择时必须释放已预占 spawn claim，并处理空列表；本轮未修。
+- SUPERSEDED: 2026-10-15 每批先筛选满足安全距离的地图点，再随机选择并申请 pending；空地图或无合格点直接跳过，无随机无限重试或 pending 泄漏。 守卫 `tests/architecture_contract_checks.gd`；AUD-ENG-004 resolved。（来源：code | test）
+- Source / 来源: test
+- Date / 日期: 2026-10-15
+
+
+### [Upgrade/Policy] 候选不足时展示现有项，默认防御权重为中性
+- Evidence / 证据: 用户 2026-10-15 对权重与候选降级问题的明确答复；`scenes/manager/item_weight_manager.gd:52,73`；`ui/UpgradeScreen.gd:206`；`tests/architecture_contract_checks.gd`。
+- Notes / 说明: 默认 DEFENSE=1，真实启用标签取平均，既有低血/回合/刷新额外防御增益保留；不要通过复活零权重内容补足选项。只有 1/2 项就展示现有唯一项；0 项可继续，不收刷新费，手柄仍能访问继续按钮。
+- Source / 来源: user
+- Date / 日期: 2026-10-15
+
+### [Scene/Coop] 就绪事件修正后，重叠切场请求也必须有代次与结果契约
+- Evidence / 证据: `script/GameEvents.gd:190`；官方 `net/coop_net.gd:_remote_change_scene`；`tests/architecture_contract_checks.gd:_request_scene`；真实多进程 upgrade 回归。
+- Notes / 说明: 只把 tree_changed 换成 scene_changed 并在忙时拒绝，会丢掉准备房与正式关卡同帧重叠的后一请求。切场串行且最新有效请求胜出；过期操作不生成玩家、不发首回合。联机转场加独立场景代次，等待成功结果后才上报 _client_scene_ready；不能再以一个 process_frame 推断就绪。
+- Source / 来源: test
+- Date / 日期: 2026-10-15

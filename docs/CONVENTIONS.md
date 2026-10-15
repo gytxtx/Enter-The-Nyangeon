@@ -149,6 +149,8 @@ layer N = bit `1<<(N-1)`：
 
 > 完整文档见 `mod_sdk/README.md`；本节省略版。
 
+- **安装预检（2026-10-15）**：只接受独立、未加密、非 sparse/delta 的完整 PCK（格式 v2/v3/v4，且引擎版本不高于当前运行版本）；安装前读取目录、验证文件范围和 MD5，不在游戏当前会话挂载候选包。MD5 用于检测损坏，不认证作者；有效 PCK 也不保证 Mod 脚本或玩法兼容。证据：`script/mod_pack_validator.gd:6`。
+
 - **包结构**：`<mod_id>.zip` → `mod.json` + `<mod_id>.pck` + 可选 `icon.png`。pck 内资源放 `res://mods/<mod_id>/`。`icon.png` 放包根，导入后即 `user://mods/<id>/icon.png`（列表优先读它；无则回退 `mod.json.icon` 指向的 pck 内 `res://` 路径；都没有则图标列留空）。
 - **描述**：`mod.json` 可选 `description`（直接字符串；Label 自动翻译，命中翻译键即翻译）。MOD 页签悬停/点按行显示 tooltip：名字 + 版本 + 作者 + 描述。
 - **发现**：`mods/<id>/defs/<kind>/*.tres` 按目录名映射类型（`characters`/`shop_characters`/`upgrades`/`enemies`/`supports`/`clothes`/`game_modes`/`levels`）；或构建期生成 `content_index.json`（首选，避免运行时枚举风险；某 kind 支持 `{"card":..,"card_scene":..}`）。`manifest.characters` 只跳过 `characters` 的目录扫描，其余 kind 照常。
@@ -182,3 +184,11 @@ layer N = bit `1<<(N-1)`：
 - **`value` 约定**：`[max_layer, magnitude, seconds]`；联机消毒最多保留 3 项。
 - **召唤物光环**：`coop_summon_aura=true` 即入组并由基类实现 `network_summon_aura_info()`；远端召唤物由 mod 10Hz（`_tick_summon_auras`）扫描转发。
 - **已知限制**：支援 EX 结束时按 `_support_buffed_peers` 每个 peer 只记**最后一条** buff 路径；同一光环给同一 peer 叠多个不同 buff 时该兜底可能漏（正常 `body_exited` 路径不受影响）。
+
+
+## 12. Runtime ownership / 运行期归属约定（2026-10-15）
+
+- 暂停必须通过 `GameEvents.set_pause_request(self, active, tag, pause_world, lock_menu)`；独立来源用独立 owner/tag，不直接写 `SceneTree.paused` 或借用共享回合锁。
+- 商店购买必须调用 `Game.purchase_unlock` / `purchase_support_upgrade`，消费 bool 失败结果后恢复输入并显示文案；不可先解锁再扣款或拆成多次保存。
+- 道具注册 ID 不依赖场景 basename；`EquipItem` 入树前绑定 `item_id`。补丁不允许直接改身份字段，复制内容用同 kind 的 inherit。
+- 新增首回合接管用 `first_round_start_interceptor`，true=接管；旧 gate 直接字段的允许语义只为兼容保留。

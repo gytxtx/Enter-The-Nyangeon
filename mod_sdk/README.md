@@ -105,6 +105,10 @@ res://mods/example/defs/characters/example_hero.tscn
 
 ## 8. 安装
 
+2026-10-15：游戏内导入在交换安装目录前校验独立完整 PCK 的文件头、目录、数据边界和 MD5；损坏更新不会替换旧包。支持未加密的 v2/v3/v4 格式，不支持 sparse bundle 或 delta 文件，包的引擎版本不能高于当前游戏引擎。预检不挂载包，也不验证脚本或玩法兼容性。
+
+启停记录以临时文件和备份保存，失败会恢复开关并提示重试。记录损坏或缺失但有旧备份时，全停用并提示重新选择；不会自动使用可能早于最近一次停用的备份启用 Mod。用户明确重新选择后可重建状态，备份保留供人工恢复。
+
 - 游戏内：主菜单左下角 **MOD** 按钮 → `导入 zip` → 选 zip → **重启游戏** 生效。
 - 手动：把 `<mod_id>.pck` 与 `mod.json` 放到 `user://mods/<mod_id>/`（Windows 为 `%APPDATA%\Godot\app_userdata\Enter The Nyangeon\mods\`）。
 - 桌面端还会扫描**可执行文件同目录的 `mods/`**（便携模式，只读）。
@@ -283,6 +287,8 @@ members = Array[String](["my_mod_hero", "my_mod_leader"])
 
 ## 16. 本地开发：项目根 `mods/` + `_mod_template` + `build_local_mod.ps1`
 
+> 下述 `_mod_template` / `doom_slayer_izzy` 属维护者本地、被忽略的目录，不随干净克隆提供。仓库内可分发示例位于 `mod_sdk/example_mod/mods/example/`；没有本地骨架时请按 `CHARACTER_GUIDE.md` 制作。该说明不改变本地镜像或打包规则。
+
 - 项目根 `mods/`（gitignore 的 `/mods/`）是本仓库的「本地 mod 编辑器镜像」：放这里的 mod 源会被编辑器导入（生成 `.uid`）但不入库；运行时 `ModManager` 只扫 `user://mods/`（桌面另扫 exe 同目录 `mods/`），**不扫** `res://mods/`，故需打包安装后才生效。
 - `mods/_mod_template/` 是**可复制的 mod 角色骨架**：复制整目录 → 改名为 `<mod_id>` → 全局替换 `_mod_template`，即得 `PlayerCard`/`PSCard` + 战斗场景（复制自 `momoi.tscn`）+ 选人卡 + 社团卡。用法见 `mods/_mod_template/README.md`；角色制作完整流程见 `CHARACTER_GUIDE.md`。
 - `mods/doom_slayer_izzy/` 是由该骨架生成的示例 mod（角色 `IZZY`）。
@@ -304,3 +310,10 @@ members = Array[String](["my_mod_hero", "my_mod_leader"])
 `enemy_damage_taken` 继续保留给结算关联的施加状态/触发道具；在客机上它由房主结算后回传，因此旧 Mod 在该事件内改倍率不能改变本次权威 HP，应迁移到前置阶段。预先放入子弹 DamageData 的纯数值闭包（如距离增伤）也会在本端求值；**不传输 Callable**。
 
 官方联机协议 v4 使用可序列化的 `resolved_damage`。目标条件使用攻击者命中时的快照，房主继续负责目标合法性、无敌、阵营和真实 HP；沿用好友房可信的数值自报模型，不新增反作弊语义。双方需同时更新本体和官方 Mod，具体见 `coop_mod/README.md`。
+
+
+## Build result contract / 构建结果契约（2026-10-15）
+
+`build_mod.ps1`、`build_coop_mod.ps1`、`build_local_mod.ps1` 共用 `build_common.ps1`。非零退出、脚本/导出错误、PCKPacker 缺 `PACK_MOD:`、只读包校验失败都会终止；仅精确豁免回归 runner 同样识别的退出资源计数告警。候选 `.building.pck` 校验通过才替换正式包，ZIP 经 `.building.zip` 发布，失败不发布候选包，也不覆盖已有 ZIP。`verify_mod_pack.gd` 复用本体 `mod_pack_validator.gd`，完整性不代表所有玩法/平台兼容。
+
+`inherit` 自动写入目标身份并拒绝跨内容类别；修改字段前复制并复用正常注册校验。升级场景可以与注册 ID 不同名，`EquipItem` 的稳定 ID 由生成方入树前交付；直接使用基类且不显式指定 ID 时仍保留旧 basename 回退。首回合新接管槽为 `ExtensionHooks.first_round_start_interceptor`，true=跳过本体启动。

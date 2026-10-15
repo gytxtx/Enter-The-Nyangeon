@@ -4,14 +4,14 @@
 > 双语项目知识库。英文标题、中文说明、代码符号原样保留。
 > Entry point / 入口: `AGENTS.md` → `docs/`.
 > 用户纠正优先于本文推断；来源标记（code/user/test）见 `docs/LEARNINGS.md`。
-> Last updated / 最后更新: 2026-10-14
+> Last updated / 最后更新: 2026-10-15
 
 ## 1. What this is / 项目是什么
 
 - **Engine**: Godot **4.7**, Forward Plus, 2D.
 - **Genre**: top-down arena shooter / roguelite (Blue Archive–flavored fan game).
 - **Main scene**: `res://scenes/main/title_screen.tscn` (`project.godot:18`).
-- **Scale**: 本体 `script/` / `scenes/` / `ui/` / `resources/` 共 481 个 GDScript；整体场景/SDK/测试规模以审计地图统计为准。
+- **Scale**: 本体 `script/` / `scenes/` / `ui/` / `resources/` 共 483 个 GDScript（含本轮两个新 helper）；整体场景/SDK/测试规模以审计地图统计为准。
 - **Physics**: Rapier2D (`project.godot:234`).
 - **Resolution**: design 640×360, window override 1280×720, stretch `canvas_items` (`project.godot:46-50`).
 - **Version**: 以 `script/Game.gd:13` 的 `Game.version_number` 为准，当前 **`v0.5.1.4`**；官方联机发布版本 `0.1.10`，尚未提交上游的联机协议变更统一为 v4。SUPERSEDED: 2026-10-14 先回滚本体至 `v0.5.1.3`（原标 `v0.5.1.4`/`0.1.12`/协议 v5），随后用户改定发布版本为 `v0.5.1.4`（导出文件名同步 0.5.1.4）；联机与具备前置伤害接口的本体仍需配套更新。
@@ -32,7 +32,7 @@
 | `assets/` | 空（未使用）。 |
 | `addons/` | `godot-rapier2d`（物理）、`godot_ai`（编辑器 MCP 插件，非游戏运行时）。 |
 | `android/` | Android 导出配置与资源；`icons/` 存放启动器主图标、自适应前景/背景及主题单色 SVG，`build/` 为忽略的生成目录。 |
-| `mod_sdk/` | **Mod 开发套件**（含 `.gdignore`，不进本体包）：包契约、示例模组、`_mod_template`（可复制角色骨架）、`build_mod.ps1` / `build_coop_mod.ps1` / `build_local_mod.ps1`（项目根 `mods/` 本地打包）、官方联机源码 `coop_mod/`；通用隔离打包 `pack_mod_source.ps1`。详见 `mod_sdk/README.md`、`CONVENTIONS.md` §10。 |
+| `mod_sdk/` | **Mod 开发套件**（含 `.gdignore`，不进本体包）：包契约、示例模组、`build_mod.ps1` / `build_coop_mod.ps1` / `build_local_mod.ps1`（项目根 `mods/` 本地打包）、官方联机源码 `coop_mod/`；通用隔离打包 `pack_mod_source.ps1`。详见 `mod_sdk/README.md`、`CONVENTIONS.md` §10。 |
 | `tests/` | MCP 测试套件（`test_*.gd`，`extends McpTestSuite`），由编辑器内 `test_run` 运行（`addons/godot_ai`）；另有独立 UI 回归入口 `run_ui_ux_checks.py` + `test_ui_ux_regressions.gd`，不依赖插件，隔离用户目录运行，`--screenshots` 可输出局部场景渲染。 |
 | `docs/` | **本知识库**（本项目新增）。 |
 
@@ -41,7 +41,7 @@
 
 - **审计修复入口（2026-10-14）**：`tests/run_support_persistence_checks.py` 覆盖支援 Mod 启停与 v2→v3 迁移；`run_mod_lifecycle_checks.py` 覆盖冲突闭包、卸载链接；联机 runner 新增 relay_queue / simultaneous_leave。SDK `net/coop_enet_peer.gd` 适配原生 ENet 的连接事件/发送边界，不增加 autoload；`SceneData` 格式升为 3，运行期资源由 SupportData 恢复。
 
-- **从零全量审查及修复（2026-10-14）**：full 审查新增的五项（Relay 准入、前置伤害、导出镜像、刷新权重、外推）已修复；原 full 报告归档，当前结果以 CODEBASE_AUDIT.md 为准。新永久守卫 `run_damage_contract_checks.py`、`run_upgrade_snapshot_checks.py`、`run_export_boundary_checks.py`；联机恢复扩至 13 组，增加真实双端 damage 场景；中继测试强制并发准入顺序。旧观察型诊断保留并随实际调用链更新。
+- **从零全量审查及修复（2026-10-14）**：full 审查新增的五项（Relay 准入、前置伤害、导出镜像、刷新权重、外推）已修复；实现原理见 `ARCHITECTURE.md`、`SYSTEMS.md`，回归入口见 `MOD_TESTING.md`。新永久守卫 `run_damage_contract_checks.py`、`run_upgrade_snapshot_checks.py`、`run_export_boundary_checks.py`；联机恢复扩至 13 组，增加真实双端 damage 场景；中继测试强制并发准入顺序。旧观察型诊断保留并随实际调用链更新。
 
 ## 3. Scene ↔ script pairing rule / 场景与脚本配对规则
 
@@ -111,4 +111,14 @@ test_room.tscn     (Node2D, test_room.gd)  ← 沙盒/测试房（从 menu 进�
 | Mod 导出/真机验证 | `docs/MOD_TESTING.md` |
 | 官方联机通用拓展接口 | `docs/COOP_EXTENSION_API.md` → 官方 `net/coop_extensions.gd`；`tests/run_coop_extension_contract_checks.py` |
 | 已知坑与未解问题 | `docs/LEARNINGS.md`, `docs/WORKLOG.md` |
-| 全仓工程审计与当前问题状态 | 根 `CODEBASE_AUDIT.md`（历史修复摘要）；当前提交需以独立回归结果为准。 |
+
+## 8. Layout review / 目录复查（2026-10-15）
+
+当前目录大体可用。`script/` 也存放 20 个共享 `.tscn`，并非纯代码目录；专属设置脚本在 `script/game_option.gd` / `mod_option.gd`，对应场景在 `ui/`。后续可逐功能整理，不能机械全仓搬迁或删除所谓零字面量入引用脚本。SDK 源码是维护真源，本地 `mods/` 是编辑器镜像，包内 `res://mods/` 是运行命名空间。移动资源前核对静态路径、动态拼接、UID 及仓外 Mod 兼容性。`mods/_mod_template/` 是忽略的本地骨架，不随干净克隆提供；跟踪示例源位于 `mod_sdk/example_mod/mods/example/`。
+
+
+## 9. Repair guards / 架构修复守卫（2026-10-15）
+
+- `tests/architecture_contract_checks.gd` / `run_architecture_checks.py`：首回合、补丁、场景代次、暂停归属、购买事务、标签、身份、候选池和刷怪；测试资源集中在 `tests/fixtures/architecture/`。
+- `mod_sdk/build_common.ps1` / `verify_mod_pack.gd`：三个构建入口共用成功判定，复用 `script/mod_pack_validator.gd`；`tests/test_build_contract.py` 验证失败保留与真实导出。
+- 系统行为以 `ARCHITECTURE.md`、`SYSTEMS.md` 为准；验证入口见 `MOD_TESTING.md`，不机械移动公开 SDK 路径。
