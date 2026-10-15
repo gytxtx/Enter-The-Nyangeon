@@ -10,6 +10,9 @@ signal languages_changed
 
 const MODS_DIR := "user://mods"
 const STATE_PATH := "user://mods/mods_state.json"
+var _state_store = preload("res://script/mod_state_store.gd").new(STATE_PATH)
+var _state_default_enabled := true
+var state_warning := ""
 const ORDER_PATH := "user://mods/mods_order.json"
 # 卸载时因 pck 被占用/目录只读而未能删除的 mod id，下次启动挂载前再删。
 const PENDING_UNINSTALL_PATH := "user://mods/.pending_uninstall.json"
@@ -128,22 +131,19 @@ func _collect_player_ids(card) -> void:
 
 # ---------------- 状态 ----------------
 
-func _save_state() -> void:
-	var data := {}
+func _save_state() -> bool:
+	# 保留未安装 ID 的停用墓碑（如待卸载目录），后续切换其他 Mod 也不能丢失。
+	var data: Dictionary = _state_store.load_data().data.duplicate()
 	for id in _mods:
 		data[id] = bool(_mods[id].enabled)
-	var f := FileAccess.open(STATE_PATH, FileAccess.WRITE)
-	if f:
-		f.store_string(JSON.stringify(data, "\t"))
-		f.close()
+	return _state_store.save_data(data)
 
 
 func _read_state() -> Dictionary:
-	if not FileAccess.file_exists(STATE_PATH):
-		return {}
-	var txt := FileAccess.get_file_as_string(STATE_PATH)
-	var parsed = JSON.parse_string(txt)
-	return parsed if parsed is Dictionary else {}
+	var result: Dictionary = _state_store.load_data()
+	_state_default_enabled = result.default_enabled
+	state_warning = result.warning
+	return result.data
 
 
 # ---------------- 用户顺序 ----------------
@@ -233,7 +233,7 @@ func _try_load_mod(mod_dir: String, dir_name: String, state: Dictionary) -> void
 		"id": id,
 		"dir": mod_dir,
 		"manifest": manifest,
-		"enabled": bool(state.get(id, true)),
+		"enabled": bool(state.get(id, _state_default_enabled)),
 		"mounted": false,
 		"error": "",
 	}
@@ -407,10 +407,29 @@ func _apply_patches() -> void:
 		for p in _collect_patch_files(rec):
 			var ops = JSON.parse_string(FileAccess.get_file_as_string(p))
 			if ops is Array:
-				ModPatch.apply_all(_registry, ops, _order, validate)
+				ModPatch.apply_all(_registry, ops, _order, validate, _validate_content_entry)
 			else:
 				push_warning("[ModManager] patch 非数组：%s" % p)
 
+
+func _validate_content_entry(kind: String, id: String, entry: Dictionary) -> bool:
+	var res: Resource = entry.res
+	if not _type_ok(kind, res) or _res_id(kind, res) != id:
+		return false
+	if kind == "enemies" and not _validate_enemy(res, id):
+		return false
+	if kind == "characters" and not _validate_character(res):
+		return false
+	var scene := str(entry.get("scene", ""))
+	if scene != "" and (not ResourceLoader.exists(scene, "PackedScene") or not load(scene) is PackedScene):
+		return false
+	if entry.get("_card_scene_changed", false):
+		var card_path := str(res.get("card_scene"))
+		if card_path != "" and not ResourceLoader.exists(card_path, "PackedScene"):
+			return false
+		entry.card_scene = load(card_path) if card_path != "" else null
+		entry.erase("_card_scene_changed")
+	return true
 
 func _collect_patch_files(rec: Dictionary) -> Array:
 	var out: Array = []
@@ -724,11 +743,16 @@ func _register_path(rec: Dictionary, kind: String, path: String, card_scene_path
 # 校验并落表（供 _register_path 与对外 register_content 共用）。
 # scene_hint：注册路径（仅 upgrades 用于推导同目录同名 .tscn）；scene_path_override：显式场景路径。
 func _register_res(mod_id: String, overrides: Array, kind: String, id: String, res, card_scene_path: String, scene_hint: String, scene_path_override: String = "") -> bool:
+	if not res is Resource:
+		return false
 	if not KIND_CLASS.has(kind):
 		push_warning("[ModManager] 未知 kind：%s" % kind)
 		return false
 	if not _type_ok(kind, res):
 		push_warning("[ModManager] 类型不符（%s）：%s" % [kind, id])
+		return false
+	if _res_id(kind, res) != id:
+		push_warning("[ModManager] 注册 ID 与资源身份不一致：%s:%s" % [kind, id])
 		return false
 	# 同一 mod 的重复注册（如 manifest 显式声明 + defs 扫描命中同一 id）静默跳过
 	var existing_self = _registry[kind].get(id, null)
@@ -737,10 +761,6 @@ func _register_res(mod_id: String, overrides: Array, kind: String, id: String, r
 	var err := _validate_id(kind, id, mod_id, overrides)
 	if err != "":
 		push_warning("[ModManager] %s 注册被拒：(%s) %s" % [kind, id, err])
-		return false
-	if kind == "enemies" and not _validate_enemy(res, id):
-		return false
-	if kind == "characters" and not _validate_character(res):
 		return false
 	var scene_path := scene_path_override
 	if scene_path == "":
@@ -752,14 +772,20 @@ func _register_res(mod_id: String, overrides: Array, kind: String, id: String, r
 	if card_scene_path == "":
 		card_scene_path = str(res.get("card_scene")) if res.get("card_scene") != null else ""
 	var card_scene: PackedScene = null
-	if card_scene_path != "" and ResourceLoader.exists(card_scene_path):
-		card_scene = load(card_scene_path)
+	if card_scene_path != "":
+		if not ResourceLoader.exists(card_scene_path, "PackedScene"):
+			return false
+		card_scene = load(card_scene_path) as PackedScene
+		if card_scene == null:
+			return false
 	var entry := {
 		"res": res,
 		"scene": scene_path,
 		"card_scene": card_scene,
 		"mod": mod_id,
 	}
+	if not _validate_content_entry(kind, id, entry):
+		return false
 	if _reserved[kind].has(id):
 		# 仅 manifest overrides 声明才会走到这里（否则 _validate_id 已拒）
 		var prev = _registry[kind].get(id, null)
@@ -780,8 +806,7 @@ func register_content(kind: String, id: String, res, mod_id: String, scene_path:
 	var overrides: Array = []
 	if _mods.has(mod_id):
 		overrides = _mods[mod_id].manifest.get("overrides", [])
-	_register_res(mod_id, overrides, kind, id, res, card_scene_path, "", scene_path)
-	return _registry.get(kind, {}).has(id)
+	return _register_res(mod_id, overrides, kind, id, res, card_scene_path, "", scene_path)
 
 
 # 追加/更新一条运行时翻译（供 ModAPI.add_translation）。locale 形如 "zh_CN"/"en"。
@@ -1315,12 +1340,17 @@ func _mod_icon_path(rec: Dictionary) -> String:
 	return ""
 
 
-func set_enabled(id: String, on: bool) -> void:
+func set_enabled(id: String, on: bool) -> Dictionary:
 	if not _mods.has(id):
-		return
+		return {"ok": false, "error": "not_installed"}
+	var previous: bool = _mods[id].enabled
 	_mods[id]["enabled"] = on
-	_save_state()
+	if not _save_state():
+		_mods[id]["enabled"] = previous
+		return {"ok": false, "error": "mod_state_save_failed"}
+	state_warning = ""
 	mods_changed.emit()
+	return {"ok": true}
 
 
 # 卸载一个 mod：禁用 + 从注册表移除 + 删除其在所有 mod 根下的目录。
@@ -1330,10 +1360,15 @@ func uninstall(id: String) -> Dictionary:
 	if id == "" or not _mods.has(id):
 		return {"ok": false, "error": "not_installed"}
 	var was_mounted: bool = bool(_mods[id].get("mounted", false))
+	var was_enabled: bool = bool(_mods[id].enabled)
 	_mods[id]["enabled"] = false
+	if not _save_state():
+		_mods[id]["enabled"] = was_enabled
+		return {"ok": false, "error": "mod_state_save_failed"}
+	state_warning = ""
 	_mods.erase(id)
 	_resolved_order.erase(id)
-	_save_state()
+	# 保留已卸载 ID 的 false 墓碑，防止文件删除失败时下次扫描重新启用。
 	var deleted := _delete_mod_dirs(id)
 	var pending := _read_pending()
 	if deleted:

@@ -104,6 +104,8 @@ func _refresh() -> void:
 		list_box.add_child(_make_row(m))
 	if _pending_restart:
 		status_label.text = tr("mod_restart_notice")
+	elif not ModManager.state_warning.is_empty():
+		status_label.text = tr(ModManager.state_warning)
 	_update_arrows()
 
 
@@ -444,7 +446,11 @@ func _cancel_drag() -> void:
 # ---------------- 启停 / 导入 ----------------
 
 func _on_toggle(id: String, on: bool) -> void:
-	ModManager.set_enabled(id, on)
+	var result := ModManager.set_enabled(id, on)
+	if not result.ok:
+		_refresh()
+		status_label.text = tr(str(result.error))
+		return
 	_pending_restart = true
 	status_label.text = tr("mod_restart_notice")
 
@@ -481,7 +487,7 @@ func _on_uninstall_confirmed() -> void:
 	_selected_id = ""
 	_refresh()
 	if not r.get("ok", false):
-		status_label.text = tr("mod_uninstall_fail") % str(r.get("error", ""))
+		status_label.text = tr("mod_uninstall_fail") % tr(str(r.get("error", "")))
 		return
 	if r.get("deleted", false):
 		status_label.text = tr("mod_uninstall_ok") % name

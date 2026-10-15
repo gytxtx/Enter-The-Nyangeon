@@ -32,11 +32,8 @@ func install(zip_path: String, root: String, max_files: int, max_bytes: int) -> 
 		return _failure("无法创建暂存目录")
 	error = _extract(reader, files, stage, max_bytes)
 	reader.close()
-	var pck_file := FileAccess.open(stage.path_join(pck), FileAccess.READ) if error == "" else null
-	if error == "" and (pck_file == null or pck_file.get_length() == 0):
-		error = "PCK 未成功写入"
-	if pck_file != null:
-		pck_file.close()
+	if error == "":
+		error = preload("res://script/mod_pack_validator.gd").validate(stage.path_join(pck))
 	if error != "":
 		_cleanup(stage, root)
 		return _failure(error)
