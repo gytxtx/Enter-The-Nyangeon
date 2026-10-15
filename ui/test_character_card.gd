@@ -85,7 +85,7 @@ func _on_button_pressed() -> void:
 		return
 	_selection_locked = true
 	SoundManager.play_sfx("ButtonSounds")
-	get_tree().paused = true
+	GameEvents.set_pause_request(self, true)
 	GameEvents.emit_test_room_button_close()
 	GameEvents.emit_teset_room_now_player(player_path)
 	Transition.play_left_start()
@@ -100,7 +100,7 @@ func _on_button_pressed() -> void:
 	Transition.play_left_end()
 	await Transition.animation_player.animation_finished
 	GameEvents.emit_test_room_reset()
-	get_tree().paused = false
+	GameEvents.set_pause_request(self, false)
 	_selection_locked = false
 
 func _on_button_gui_input(event: InputEvent) -> void:

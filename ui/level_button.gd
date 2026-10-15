@@ -125,4 +125,10 @@ func _on_timer_timeout() -> void:
 	SoundManager.bgm_fade_out()
 	Transition.play_left_start()
 	await Transition.left_end_start
-	GameEvents.change_scene(path,level_select.player)
+	var result: Dictionary = await GameEvents.change_scene(path, level_select.player)
+	if not result.get("ok", false) and not result.get("cancelled", false):
+		level_select.transition_started = false
+		level_select._selection_pending = false
+		level_select._set_auxiliary_enabled(true)
+		level_select.emit_player_selected()
+		grab_focus()

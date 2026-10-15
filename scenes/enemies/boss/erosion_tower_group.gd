@@ -154,13 +154,11 @@ func boss_death_anim(tower: Node = null) -> void:
 		camera_marker.position = tower.position + Vector2(0, -64)
 	GameEvents.emit_camera_move(camera_marker, true)
 	GameEvents.emit_ui_visible(false)
-	GameEvents.emit_pause_lock(true)
-	get_tree().paused = true
+	GameEvents.set_pause_request(self, true)
 	await animation_player.animation_finished
 	GameEvents.emit_camera_reset()
 	GameEvents.emit_ui_visible(true)
-	get_tree().paused = false
-	GameEvents.emit_pause_lock(false)
+	GameEvents.set_pause_request(self, false)
 	GameEvents.emit_enemy_dead_position(self.global_position)
 	self.visible = false
 	for i in tower_group:
@@ -178,15 +176,13 @@ func boss_enter_anim():
 		return
 	GameEvents.emit_camera_move(camera_marker, true)
 	GameEvents.emit_ui_visible(false)
-	GameEvents.emit_pause_lock(true)
-	get_tree().paused = true
+	GameEvents.set_pause_request(self, true)
 	await tower_1.animation_player_3.animation_finished
 	for i in tower_group:
 		i.animation_player_3.process_mode = Node.PROCESS_MODE_INHERIT
 	GameEvents.emit_camera_reset()
 	GameEvents.emit_ui_visible(true)
-	get_tree().paused = false
-	GameEvents.emit_pause_lock(false)
+	GameEvents.set_pause_request(self, false)
 	attack_state(attack_type)
 
 func count_now_hp():

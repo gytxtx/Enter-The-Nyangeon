@@ -582,6 +582,7 @@ var scene_ready_peers: Dictionary = {}
 var _handshaked_peers: Dictionary = {}   # peer_id -> true（版本握手通过）
 var _pending_hello: Dictionary = {}      # peer_id -> 连接时刻（未握手超时踢除）
 var _applying_change: bool = false
+var _remote_scene_generation: int = 0
 var _force_release: bool = false
 var _pending_scene_path: String = ""
 var first_round_emitted: bool = false
@@ -1593,7 +1594,7 @@ func _handle_host_left() -> void:
 	print("[etn_coop] host session closed -> return to menu")
 	# 解除选人/升级/暂停菜单造成的暂停与受控（否则转场后仍卡住）
 	_set_select_pause(false)
-	tree.paused = false
+	GameEvents.release_pause_owner(self)
 	# 立即清理传输与 run state，避免继续向已消失的房主发包
 	close_connection(true)
 	generation = _session_generation
@@ -1813,7 +1814,7 @@ func install_hooks() -> void:
 		return
 	_hooks_installed = true
 	ExtensionHooks.change_scene_gate = Callable(self, "_gate_change_scene")
-	ExtensionHooks.first_round_start_gate = Callable(self, "_gate_first_round")
+	ExtensionHooks.first_round_start_interceptor = func() -> bool: return not _gate_first_round()
 	ExtensionHooks.enemy_damage_interceptor = Callable(self, "_intercept_enemy_damage")
 	ExtensionHooks.coin_pickup_gate = Callable(self, "_gate_coin_pickup")
 	ExtensionHooks.medkit_spawn_gate = Callable(self, "_gate_medkit_spawn")
@@ -2495,6 +2496,7 @@ func _leave_session_local() -> void:
 
 
 func _on_round_start() -> void:
+	GameEvents.set_pause_request(self, false, &"round_upgrade")
 	round_upgrade_ready_peers.clear()
 	_round_upgrade_hold = false
 	_round_upgrade_cover_ready = false
@@ -2958,12 +2960,12 @@ func _remote_round_upgrade() -> void:
 	if multiplayer.is_server():
 		return
 	if _in_round_upgrade:
-		get_tree().paused = true
+		GameEvents.set_pause_request(self, true, &"round_upgrade")
 		return
 	_in_round_upgrade = true
 	GameEvents.emit_round_upgrade()
 	GameEvents.emit_player_buff_clear()
-	get_tree().paused = true
+	GameEvents.set_pause_request(self, true, &"round_upgrade")
 
 
 func _is_test_room() -> bool:
@@ -3855,7 +3857,7 @@ func _is_lan_session() -> bool:
 func _on_pause_visibility(visible: bool, pause_screen: Node) -> void:
 	if not is_lan_game:
 		# 单机：保持本体行为
-		get_tree().paused = visible
+		GameEvents.set_pause_request(pause_screen, visible, &"menu", true, false)
 		return
 	# LAN：只冻结本地玩家；世界继续跑；暂停菜单始终可操作
 	if pause_screen is Node and int(pause_screen.get("process_mode")) != Node.PROCESS_MODE_ALWAYS:
@@ -7948,7 +7950,7 @@ func _force_team_game_over_authoritative(player_dead: bool) -> void:
 	if team_game_over_forced:
 		return
 	team_game_over_forced = true
-	get_tree().paused = false
+	GameEvents.release_pause_owner(self)
 	rpc("_force_team_game_over", player_dead)
 	GameEvents.force_emit_game_over(player_dead)
 
@@ -7983,7 +7985,7 @@ func _maybe_finish_round_upgrade() -> void:
 @rpc("authority", "call_remote", "reliable")
 func _force_team_game_over(player_dead: bool) -> void:
 	team_game_over_forced = true
-	get_tree().paused = false
+	GameEvents.release_pause_owner(self)
 	GameEvents.force_emit_game_over(player_dead)
 
 
@@ -8067,27 +8069,29 @@ func _server_player_selected(player_scene: String) -> void:
 func _remote_change_scene(path: String, roster: Dictionary, level_state: Dictionary = {}) -> void:
 	if multiplayer.is_server():
 		return
+	_remote_scene_generation += 1
+	var scene_generation := _remote_scene_generation
 	# 离开选人/准备房前先解除暂停，保证转场与目标场景正常运行
 	_set_select_pause(false)
 	var generation: int = _session_generation
 	var source_peer = multiplayer.multiplayer_peer
 	# 复刻 host 的场景切换转场（左划开始 → 结束再真正切场景）
 	await _play_scene_transition_start()
-	if generation != _session_generation or not _net_connected() or multiplayer.multiplayer_peer != source_peer:
+	if scene_generation != _remote_scene_generation or generation != _session_generation or not _net_connected() or multiplayer.multiplayer_peer != source_peer:
 		return
 	_applying_change = true
 	_reset_player_sync()
 	first_round_emitted = false
 	_apply_level_state(level_state)
 	player_scene_by_peer = roster.duplicate()
+	var result: Dictionary
 	if roster.is_empty():
-		GameEvents.change_scene(path, "")
+		result = await GameEvents.change_scene(path, "")
 	else:
 		var own: String = str(roster.get(multiplayer.get_unique_id(), DEFAULT_PLAYER_SCENE))
-		GameEvents.change_scene(path, own)
+		result = await GameEvents.change_scene(path, own)
 	_applying_change = false
-	await get_tree().process_frame
-	if generation != _session_generation or not _net_connected() or multiplayer.multiplayer_peer != source_peer:
+	if not result.get("ok", false) or scene_generation != _remote_scene_generation or generation != _session_generation or not _net_connected() or multiplayer.multiplayer_peer != source_peer:
 		return
 	rpc_id(1, "_client_scene_ready")
 
@@ -8858,10 +8862,7 @@ func _remote_boss_camera_move(pos: Vector2, black_frame: bool) -> void:
 	if black_frame:
 		_boss_cinematic_active = true
 		_cinematic_deadline_msec = Time.get_ticks_msec() + CINEMATIC_MAX_MSEC
-		GameEvents.emit_pause_lock(true)
-		var tree := get_tree()
-		if tree != null:
-			tree.paused = true
+		GameEvents.set_pause_request(self, true, &"boss")
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -8889,10 +8890,7 @@ func _release_boss_cinematic() -> void:
 		return
 	_boss_cinematic_active = false
 	_cinematic_deadline_msec = 0
-	var tree := get_tree()
-	if tree != null:
-		tree.paused = false
-	GameEvents.emit_pause_lock(false)
+	GameEvents.set_pause_request(self, false, &"boss")
 	GameEvents.emit_ui_visible(true)
 
 
@@ -9220,7 +9218,7 @@ func begin_battle(scene_path: String = "") -> void:
 
 func _set_select_pause(on: bool) -> void:
 	if get_tree() != null:
-		get_tree().paused = on
+		GameEvents.set_pause_request(self, on, &"select")
 
 
 func is_all_ready() -> bool:
@@ -9920,6 +9918,7 @@ func return_to_menu_after_disconnect() -> void:
 
 func close_connection(silent: bool = false) -> void:
 	if not _reconnecting:
+		GameEvents.release_pause_owner(self)
 		_session_generation += 1
 	extensions.close(_reconnecting)
 	if transport != null and transport.peer != null:

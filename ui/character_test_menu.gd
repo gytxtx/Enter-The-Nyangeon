@@ -29,7 +29,7 @@ func updata_player_path(player_path: String):
 	now_player_path = player_path
 
 func reset_player():
-	get_tree().paused = true
+	GameEvents.set_pause_request(self, true)
 	GameEvents.emit_test_room_button_close()
 	Transition.play_left_start()
 	await Transition.left_end_start
@@ -43,7 +43,7 @@ func reset_player():
 	Transition.play_left_end()
 	await Transition.animation_player.animation_finished
 	GameEvents.emit_test_room_reset()
-	get_tree().paused = false
+	GameEvents.set_pause_request(self, false)
 	SupportData.game_add_support()
 
 func close_and_reset():

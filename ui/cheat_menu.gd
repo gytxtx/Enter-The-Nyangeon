@@ -30,10 +30,7 @@ func _exit_tree() -> void:
 	if _paused_by_cheat:
 		_paused_by_cheat = false
 		Input.mouse_mode = _prev_mouse_mode
-		var t := get_tree()
-		if t != null:
-			t.paused = false
-		GameEvents.emit_pause_lock(false)
+		GameEvents.release_pause_owner(self)
 
 func _unhandled_input(event):
 	if not event.is_action_pressed("cheat_menu"):
@@ -63,15 +60,8 @@ func close_menu():
 	_set_pause(false)
 
 func _set_pause(p: bool):
-	if p:
-		_paused_by_cheat = true
-		# 与暂停菜单/演出协调：锁住用户暂停菜单，避免两个 get_tree().paused 写者失配
-		GameEvents.emit_pause_lock(true)
-		get_tree().paused = true
-	elif _paused_by_cheat:
-		_paused_by_cheat = false
-		get_tree().paused = false
-		GameEvents.emit_pause_lock(false)
+	_paused_by_cheat = p
+	GameEvents.set_pause_request(self, p)
 
 func _get_player() -> Node:
 	if player == null or not is_instance_valid(player):

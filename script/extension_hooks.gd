@@ -10,7 +10,9 @@ extends Node
 # ---------------- 接管类 ----------------
 
 var change_scene_gate: Callable = Callable()
+# 旧字段例外：true=允许，仅供兼容；新增接管逻辑使用 first_round_start_interceptor。
 var first_round_start_gate: Callable = Callable()
+var first_round_start_interceptor: Callable = Callable()
 var enemy_damage_interceptor: Callable = Callable()
 var coin_pickup_gate: Callable = Callable()
 # 医疗箱生成：mod 已接管（客机不本地生成、host 走聚合）则跳过本地 add_medical_kit（参数 [manager, spawn_position]）
@@ -136,6 +138,12 @@ func intercept_named(hook_name: StringName, args: Array = []) -> bool:
 	if run_hooks(hook_name, args):
 		return true
 	return intercept(_slot_of(hook_name), args)
+
+# 新槽统一 true=接管。旧字段保留 true=允许启动；旧命名链仍按接管语义组合。
+func should_start_first_round() -> bool:
+	if intercept_named("first_round_start_interceptor") or run_hooks("first_round_start_gate"):
+		return false
+	return not first_round_start_gate.is_valid() or bool(first_round_start_gate.call())
 
 
 func notify_named(hook_name: StringName, args: Array = []) -> void:

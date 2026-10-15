@@ -134,13 +134,11 @@ func boss_enter_anim():
 		return
 	GameEvents.emit_camera_move(camera_marker, true)
 	GameEvents.emit_ui_visible(false)
-	GameEvents.emit_pause_lock(true)
-	get_tree().paused = true
+	GameEvents.set_pause_request(self, true)
 	await enter_anim.animation_finished
 	GameEvents.emit_camera_reset()
 	GameEvents.emit_ui_visible(true)
-	get_tree().paused = false
-	GameEvents.emit_pause_lock(false)
+	GameEvents.set_pause_request(self, false)
 
 func boss_death_anim():
 	_net_boss_visual("boss_death_anim")
@@ -150,13 +148,11 @@ func boss_death_anim():
 		return
 	GameEvents.emit_camera_move(camera_marker, true)
 	GameEvents.emit_ui_visible(false)
-	GameEvents.emit_pause_lock(true)
-	get_tree().paused = true
+	GameEvents.set_pause_request(self, true)
 	await death_anim.animation_finished
 	GameEvents.emit_camera_reset()
 	GameEvents.emit_ui_visible(true)
-	get_tree().paused = false
-	GameEvents.emit_pause_lock(false)
+	GameEvents.set_pause_request(self, false)
 	GameEvents.emit_enemy_dead_position(self.global_position)
 
 func time_count():

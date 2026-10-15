@@ -97,7 +97,7 @@ func _on_button_2_pressed():
 
 func _on_reset_pressed() -> void:
 	SoundManager.play_sfx("ButtonSounds")
-	get_tree().paused = true
+	GameEvents.set_pause_request(self, true)
 	GameEvents.emit_test_room_button_close()
 	Transition.play_left_start()
 	await Transition.left_end_start
@@ -111,7 +111,7 @@ func _on_reset_pressed() -> void:
 	Transition.play_left_end()
 	await Transition.animation_player.animation_finished
 	GameEvents.emit_test_room_reset()
-	get_tree().paused = false
+	GameEvents.set_pause_request(self, false)
 
 
 func _on_close_pressed() -> void:

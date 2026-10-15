@@ -119,7 +119,7 @@ func time_count_stop(player_dead: bool):
 	tween.tween_property(Engine, "time_scale", 0.1, 0.5).from(1)
 	await tween.finished
 	Engine.time_scale = 1
-	get_tree().paused = true
+	GameEvents.set_pause_request(self, true)
 	if player_dead == true:
 		SoundManager.play_bgm(bgm_loop)
 	else:
@@ -223,8 +223,8 @@ func return_selected(event: InputEvent):
 				SoundManager.bgm_fade_out()
 				Transition.play_left_start()
 				await Transition.left_end_start
-				get_tree().paused = false
-				GameEvents.change_scene(path,"")
+				GameEvents.set_pause_request(self, false)
+				_return_to_menu()
 	
 	if event.is_action_pressed("shoot") and is_return_selected == false:
 		SoundManager.play_sfx("ButtonSounds")
@@ -234,8 +234,15 @@ func return_selected(event: InputEvent):
 		SoundManager.bgm_fade_out()
 		Transition.play_left_start()
 		await Transition.left_end_start
-		get_tree().paused = false
-		GameEvents.change_scene(path,"")
+		GameEvents.set_pause_request(self, false)
+		_return_to_menu()
+
+func _return_to_menu() -> void:
+	var result: Dictionary = await GameEvents.change_scene(path, "")
+	if not result.get("ok", false) and not result.get("cancelled", false):
+		is_return_selected = false
+		GameEvents.set_pause_request(self, true)
+		button_open()
 
 func _on_time_count_timeout():
 	second += 1

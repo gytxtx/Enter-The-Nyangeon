@@ -250,7 +250,9 @@ func menu_button_press(button_id: String):
 			SoundManager.bgm_fade_out()
 			Transition.play_left_start()
 			await Transition.left_end_start
-			GameEvents.change_scene("res://scenes/main/test_room.tscn","res://scenes/player/momoi/momoi.tscn")
+			var result: Dictionary = await GameEvents.change_scene("res://scenes/main/test_room.tscn", "res://scenes/player/momoi/momoi.tscn")
+			if not result.get("ok", false) and not result.get("cancelled", false):
+				button_open()
 		
 		"option_menu":
 			button_close()

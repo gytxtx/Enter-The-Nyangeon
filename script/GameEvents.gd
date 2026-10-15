@@ -14,6 +14,7 @@ signal menu_button(button_id: String)
 
 signal first_round_add
 signal change_scene_requested(path: String, player: String)
+signal change_scene_failed(path: String, error: int)
 signal player_downed(player: Node)
 signal player_revived(player: Node)
 signal round_upgrade
@@ -182,29 +183,71 @@ signal floor_layer_group_add(floor_node: Node)
 
 signal gamemode_conflicting(gamemode_group: Array)
 
-func change_scene(path: String, player: String):
+var _scene_change_pending: bool = false
+var _scene_change_generation: int = 0
+signal _scene_change_finished
+
+func change_scene(path: String, player: String) -> Dictionary:
 	clear_slow()
 	if ExtensionHooks.intercept_named("change_scene_gate", [path, player]):
-		return
+		return {"ok": true, "handled": true}
+	if not ResourceLoader.exists(path, "PackedScene"):
+		return _scene_change_failure(path, ERR_FILE_NOT_FOUND)
+	var target := load(path) as PackedScene
+	var player_scene: PackedScene = null
+	if player != "":
+		if not ResourceLoader.exists(player, "PackedScene"):
+			return _scene_change_failure(path, ERR_FILE_NOT_FOUND)
+		player_scene = load(player) as PackedScene
+		if player_scene == null:
+			return _scene_change_failure(path, ERR_INVALID_DATA)
+	if target == null:
+		return _scene_change_failure(path, ERR_INVALID_DATA)
+	_scene_change_generation += 1
+	var generation := _scene_change_generation
+	while _scene_change_pending:
+		await _scene_change_finished
+		if generation != _scene_change_generation:
+			return {"ok": false, "cancelled": true}
+	_scene_change_pending = true
 	change_scene_requested.emit(path, player)
 	var tree := get_tree()
-	
-	tree.change_scene_to_file(path)
-	await tree.tree_changed
-	
+	var error := tree.change_scene_to_packed(target)
+	if error != OK:
+		_scene_change_pending = false
+		_scene_change_finished.emit()
+		return _scene_change_failure(path, error)
+	clear_pause_requests()
+	await tree.scene_changed
+	_scene_change_pending = false
+	if generation != _scene_change_generation:
+		_scene_change_finished.emit()
+		return {"ok": false, "cancelled": true}
+	if tree.current_scene == null or tree.current_scene.scene_file_path != path:
+		_scene_change_finished.emit()
+		return _scene_change_failure(path, ERR_INVALID_DATA)
 	if Transition.is_left_end_start == true:
 		Transition.play_left_end()
-	
 	if player == "":
-		return
-	
-	var ins = load(player).instantiate()
-	
-	tree.get_first_node_in_group("PlayerRoot").call_deferred("add_child",ins)
-	emit_first_round_add.call_deferred()
-	
+		_scene_change_finished.emit()
+		return {"ok": true}
+	var player_root: Node = tree.get_first_node_in_group("PlayerRoot")
+	if player_root == null or (player_root != tree.current_scene and not tree.current_scene.is_ancestor_of(player_root)):
+		_scene_change_finished.emit()
+		return _scene_change_failure(path, ERR_DOES_NOT_EXIST)
+	player_root.add_child(player_scene.instantiate())
 	first_round_switch = false
-	
+	emit_first_round_add()
+	_scene_change_finished.emit()
+	return {"ok": true}
+
+func _scene_change_failure(path: String, error: int) -> Dictionary:
+	change_scene_failed.emit(path, error)
+	if Transition.is_left_end_start:
+		Transition.play_left_end()
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	Game.show_operation_error("operation_scene_failed")
+	return {"ok": false, "error": error}
 
 func emit_menu_button(button_id: String):
 	menu_button.emit(button_id)
@@ -272,8 +315,44 @@ func emit_boss_round_start():
 func emit_boss_round_end():
 	boss_round_end.emit()
 
-func emit_pause_lock(locked: bool):
-	pause_lock.emit(locked)
+var _pause_requests: Dictionary = {}
+var _pause_menu_locked: bool = false
+
+func set_pause_request(owner: Node, active: bool, tag: StringName = &"default", pause_world: bool = true, lock_menu: bool = true) -> void:
+	var key := "%s:%s" % [owner.get_instance_id(), tag]
+	if active:
+		_pause_requests[key] = {"owner": weakref(owner), "world": pause_world, "menu": lock_menu}
+	else:
+		_pause_requests.erase(key)
+	_apply_pause_requests()
+
+# 兼容旧接口；回合计时器与回合管理器共享一个阶段锁，非独立持有者。
+func emit_pause_lock(locked: bool, tag: StringName = &"round") -> void:
+	set_pause_request(self, locked, tag, false, true)
+
+func is_pause_locked() -> bool:
+	return _pause_menu_locked
+
+func release_pause_owner(owner: Node) -> void:
+	for key in _pause_requests.keys():
+		if _pause_requests[key].owner.get_ref() == owner:
+			_pause_requests.erase(key)
+	_apply_pause_requests()
+
+func clear_pause_requests() -> void:
+	_pause_requests.clear()
+	_apply_pause_requests()
+
+func _apply_pause_requests() -> void:
+	var world := false
+	var menu := false
+	for request in _pause_requests.values():
+		world = world or request.world
+		menu = menu or request.menu
+	get_tree().paused = world
+	if menu != _pause_menu_locked:
+		_pause_menu_locked = menu
+		pause_lock.emit(menu)
 
 func emit_pyroxenes_pick_up():
 	pyroxenes_pick_up.emit()
@@ -638,6 +717,14 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 func _process(_delta: float) -> void:
+	var stale := false
+	for key in _pause_requests.keys():
+		var owner: Node = _pause_requests[key].owner.get_ref()
+		if owner == null or not owner.is_inside_tree():
+			_pause_requests.erase(key)
+			stale = true
+	if stale:
+		_apply_pause_requests()
 	# 暂停期间强制常速（ALWAYS/WHEN_PAUSED 节点如暂停菜单仍会被 Engine.time_scale 缩放）；
 	# 保留 _slow_requests，取消暂停后 _apply_time_scale 自动恢复未过期的慢放。
 	var paused: bool = get_tree().paused

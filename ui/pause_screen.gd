@@ -39,7 +39,7 @@ func _ready():
 		if ExtensionHooks.is_hook_active("pause_visibility"):
 			ExtensionHooks.notify_named("pause_visibility", [visible, self])
 		else:
-			get_tree().paused = visible
+			GameEvents.set_pause_request(self, visible, &"menu", true, false)
 		)
 	GameEvents.get_player.connect(get_player)
 	get_player()
@@ -50,6 +50,7 @@ func _ready():
 	GameEvents.round_end.connect(no_can_pause)
 	GameEvents.round_start.connect(is_can_pause)
 	GameEvents.pause_lock.connect(_on_pause_lock)
+	_on_pause_lock(GameEvents.is_pause_locked())
 	GameEvents.game_over.connect(game_over_no_pause)
 	GameEvents.global_time_count.connect(auto_text)
 	GameEvents.round_upgrade.connect(hide_pause_screen)
@@ -322,8 +323,8 @@ func yes_mouse_selected(event: InputEvent):
 			SoundManager.bgm_fade_out()
 			Transition.play_left_start()
 			await Transition.left_end_start
-			get_tree().paused = false
-			GameEvents.change_scene(path,"")
+			GameEvents.set_pause_request(self, false, &"menu")
+			_return_to_menu()
 		else:
 			if PlayerData.on_endless == false:
 				SoundManager.play_sfx("UISounds2")
@@ -352,8 +353,8 @@ func yes_mouse_selected(event: InputEvent):
 			SoundManager.bgm_fade_out()
 			Transition.play_left_start()
 			await Transition.left_end_start
-			get_tree().paused = false
-			GameEvents.change_scene(path,"")
+			GameEvents.set_pause_request(self, false, &"menu")
+			_return_to_menu()
 		else:
 			if PlayerData.on_endless == false:
 				
@@ -374,6 +375,13 @@ func yes_mouse_selected(event: InputEvent):
 				get_window().set_input_as_handled()
 				var player_dead = false
 				GameEvents.emit_game_over(player_dead)
+
+func _return_to_menu() -> void:
+	var result: Dictionary = await GameEvents.change_scene(path, "")
+	if not result.get("ok", false) and not result.get("cancelled", false):
+		on_quit_yes = false
+		quit_button_open()
+		GameEvents.set_pause_request(self, visible, &"menu", true, false)
 
 func no_mouse_in():
 	SoundManager.play_sfx("ButtonSounds2")

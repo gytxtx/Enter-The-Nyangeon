@@ -101,7 +101,7 @@ func _on_round_start():
 		await get_tree().create_timer(0.1, true, false, true).timeout
 		Transition.play_left_start()
 		await Transition.left_end_start
-	get_tree().paused = false
+	GameEvents.set_pause_request(self, false, &"round_upgrade")
 	GameEvents.emit_pause_lock(false)
 	Transition.play_left_end()
 	emit_player_portal()
@@ -142,4 +142,4 @@ func _on_round_end():
 		emit_player_portal()
 		GameEvents.emit_round_upgrade()
 		GameEvents.emit_player_buff_clear()
-		get_tree().paused = true
+		GameEvents.set_pause_request(self, true, &"round_upgrade")
