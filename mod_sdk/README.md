@@ -22,6 +22,8 @@ res://mods/example/defs/characters/example_hero.tscn
 
 ## 2. mod.json 字段
 
+> 以下为当前有效格式。后续分组、发布清单及挂载前拒载方案见 [Mod Manifest v2 设计草案](../docs/MOD_MANIFEST_V2_DESIGN.md)，尚未实施。
+
 | 字段 | 说明 |
 |---|---|
 | `id` | **必需**，`^[a-z0-9_]+$`，且必须等于目录名/前缀 |

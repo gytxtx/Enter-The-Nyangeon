@@ -2557,3 +2557,15 @@
 - Notes / 说明: 当前源码明确返回 Dictionary，并不足以证明挂载旧包后的解析器也看到新版签名。已创建的 autoload 可以仍为新版，而后加载管理页的静态签名来自旧 remap；清洁工程中模拟旧签名/新实例也能复现，因此不能只归因于编辑器缓存。调用方改以 Node 运行期方法信息检查返回契约，再动态调用并验证结果。真正的旧 void 实现拒绝执行，防止先写状态、再因没有返回值误报成功。四项专项回归、36 项状态检查及纯源码 23 项设置检查通过；实际旧包的针对性检查通过，完整设置回归仍有旧页面 Label 路径不匹配，未修改本机包。
 - Source / 来源: user | test
 - Date / 日期: 2026-10-15
+
+### [Mod/Compatibility] 当前版本声明与覆盖清单并非挂载前准入条件
+- Evidence / 证据: `script/mod_manager.gd:566,572,578,1018`；`script/mod_installer.gd:36`；`script/mod_pack_validator.gd:6,54`；`mod_sdk/build_mod.ps1:24,40`；`project.godot:39,40`。
+- Notes / 说明: `game_version` 当前仅表示最低本体版本且只告警；`api_version` 超限只在资源挂载、内容扫描及补丁执行之后跳过 entry，缺失时默认当前版本。`replace_paths` 仅供构建选择导出资源，运行期未对实际 PCK 目录执行覆盖白名单检查；导出依赖可能额外带入本体文件。安装预检验证格式、引擎要求与校验和，但启动直接放入 Mod 目录的包不会经过该安装事务。因而仅收紧版本比较仍不能拦截夹带旧 autoload 的低版本声明包；挂载前准入必须同时检查声明和实际包内容。`ExtensionHooks` 声明在 `ModManager` 之后，其初次加载也可能受覆盖影响。此为现状证据与设计约束，尚未实施新的拒载规则。
+- Source / 来源: code
+- Date / 日期: 2026-10-15
+
+### [Mod/Content] 缺少 entry 不代表 Mod 在内容扫描阶段不会执行脚本
+- Evidence / 证据: `script/mod_manager.gd:725` 的 `_register_path()` 加载资源；`:697` 的 `_register_society()` 加载并实例化社团场景。
+- Notes / 说明: entry 只是显式启动入口，内容资源仍可关联脚本，场景实例化可执行初始化代码。兼容准入不能以 entry 为空为依据跳过检查；旧格式过渡也不能仅据此认定为纯数据包。元数据中的加载类型用于声明覆盖方式，不构成脚本沙箱或安全证明。
+- Source / 来源: code
+- Date / 日期: 2026-10-15

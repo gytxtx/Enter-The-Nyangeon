@@ -109,6 +109,7 @@ test_room.tscn     (Node2D, test_room.gd)  ← 沙盒/测试房（从 menu 进�
 | 按语言换字体（越南语 Roboto） | `docs/ARCHITECTURE.md` §1.10 → `script/locale_font.gd` |
 | Mod 系统（挂载/内容/补丁/entry） | `docs/ARCHITECTURE.md` §1.11、`docs/SYSTEMS.md` §11、`docs/CONVENTIONS.md` §10 → `script/mod_manager.gd`、`mod_sdk/README.md` |
 | Mod 导出/真机验证 | `docs/MOD_TESTING.md` |
+| Mod 元数据与拒载设计（草案） | [MOD_MANIFEST_V2_DESIGN.md](MOD_MANIFEST_V2_DESIGN.md)；尚未实施，当前包格式仍见 SDK |
 | 官方联机通用拓展接口 | `docs/COOP_EXTENSION_API.md` → 官方 `net/coop_extensions.gd`；`tests/run_coop_extension_contract_checks.py` |
 | 已知坑与未解问题 | `docs/LEARNINGS.md`, `docs/WORKLOG.md` |
 
