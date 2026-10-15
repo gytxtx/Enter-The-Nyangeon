@@ -53,6 +53,8 @@ JOIN_BLOCK_SEC = float(os.environ.get("JOIN_BLOCK_SEC", "30"))
 
 rooms = {}
 connected_peers: set["Peer"] = set()
+# 包含 HTTP 握手、普通 HTTP 和 WebSocket，名额持有到关闭结束。
+active_connections: set[asyncio.StreamWriter] = set()
 # 每 IP 的 join 失败时间戳（滑动窗口）；仅保留窗口内的记录，条目在无近期失败时被回收。
 ip_join_fails: dict[str, list[float]] = {}
 
@@ -626,25 +628,7 @@ async def handle_websocket(reader: asyncio.StreamReader, writer: asyncio.StreamW
         ]
     )
     writer.write(response.encode("ascii"))
-    await writer.drain()
-
-    # 连接总数上限：握手已完成，先回既有 error 控制消息再关闭（不新增消息类型），
-    # 客户端 WebSocketPeer 能收到并进入 CONNECTION_DISCONNECTED，UI 可正常提示。
-    if len(connected_peers) >= MAX_TOTAL_CLIENTS:
-        print(
-            f"[SERVER LIMIT] reject connection: peers={len(connected_peers)} >= "
-            f"{MAX_TOTAL_CLIENTS} remote={writer.get_extra_info('peername')}",
-            flush=True,
-        )
-        payload = json.dumps({"type": "error", "message": "Server full"}, separators=(",", ":")).encode("utf-8")
-        writer.write(encode_frame(0x1, payload))
-        await writer.drain()
-        writer.close()
-        try:
-            await asyncio.wait_for(writer.wait_closed(), WRITE_TIMEOUT_SEC)
-        except Exception:
-            pass
-        return
+    await asyncio.wait_for(writer.drain(), WRITE_TIMEOUT_SEC)
 
     peer = Peer(reader=reader, writer=writer)
     peer.last_seen = time.time()
@@ -723,6 +707,25 @@ async def handle_websocket(reader: asyncio.StreamReader, writer: asyncio.StreamW
 
 
 async def handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    # 事件循环内检查和入表之间没有 await，名额申请不会被其他连接插入。
+    # 超限立即拒绝，不在 semaphore 上排队积累未计数的握手 handler。
+    if len(active_connections) >= MAX_TOTAL_CLIENTS:
+        close_with_http(writer, 503, "Server full")
+        return
+    active_connections.add(writer)
+    try:
+        await _handle_connection(reader, writer)
+    finally:
+        writer.close()
+        try:
+            await asyncio.wait_for(writer.wait_closed(), WRITE_TIMEOUT_SEC)
+        except Exception:
+            pass
+        finally:
+            active_connections.discard(writer)
+
+
+async def _handle_connection(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     try:
         _, headers = await read_http_headers(reader)
     except Exception:

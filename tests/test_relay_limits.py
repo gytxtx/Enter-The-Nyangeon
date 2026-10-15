@@ -100,17 +100,20 @@ class RelayLimits(unittest.IsolatedAsyncioTestCase):
         self.port = self.server.sockets[0].getsockname()[1]
         self.writers = []
         self.saved = {}
-        for name, value in (("HTTP_HANDSHAKE_TIMEOUT_SEC", 0.1), ("JOIN_TIMEOUT_SEC", 0.2), ("FRAME_TIMEOUT_SEC", 0.1)):
+        for name, value in (("HTTP_HANDSHAKE_TIMEOUT_SEC", 0.1), ("JOIN_TIMEOUT_SEC", 0.2), ("FRAME_TIMEOUT_SEC", 0.1), ("MAX_TOTAL_CLIENTS", 512)):
             self.saved[name] = getattr(relay, name, None)
             setattr(relay, name, value)
 
     async def asyncTearDown(self):
         for writer in self.writers:
             writer.close()
-            await writer.wait_closed()
+            try:
+                await writer.wait_closed()
+            except ConnectionError:
+                pass  # 超限立即关闭时，Windows 可用 reset 表示拒绝。
         self.server.close()
         await self.server.wait_closed()
-        await asyncio.sleep(0.02)
+        await self.wait_for_slots(0)
         for name, value in self.saved.items():
             if value is None:
                 delattr(relay, name)
@@ -156,6 +159,59 @@ class RelayLimits(unittest.IsolatedAsyncioTestCase):
         await writer.drain()
         response = await asyncio.wait_for(reader.read(4096), 1.5)
         self.assertIn(b'"type":"room_created"', response)
+
+    async def wait_for_slots(self, count):
+        async def wait():
+            while len(relay.active_connections) != count:
+                await asyncio.sleep(0.001)
+        await asyncio.wait_for(wait(), 1.5)
+
+    async def test_incomplete_handshakes_are_counted_before_upgrade(self):
+        relay.MAX_TOTAL_CLIENTS = 1
+        relay.HTTP_HANDSHAKE_TIMEOUT_SEC = 2
+        first, writer = await self.connect(upgrade=False)
+        writer.write(b"GET / HTTP/1.1\r\n")
+        await writer.drain()
+        await self.wait_for_slots(1)
+        for _ in range(5):
+            rejected, _ = await self.connect(upgrade=False)
+            self.assertIn(b"503 Server full", await asyncio.wait_for(rejected.read(), 1))
+            self.assertEqual(len(relay.active_connections), 1)
+        self.assertEqual(len(relay.connected_peers), 0)
+        writer.close()
+        await asyncio.wait_for(first.read(), 1)
+        await self.wait_for_slots(0)
+        await self.connect()  # 名额释放后正常升级仍可用。
+
+    async def test_websocket_and_http_share_the_same_budget(self):
+        relay.MAX_TOTAL_CLIENTS = 1
+        _, first = await self.connect()
+        rejected, writer = await self.connect(upgrade=False)
+        writer.write(b"GET / HTTP/1.1\r\n\r\n")
+        await writer.drain()
+        try:
+            response = await asyncio.wait_for(rejected.read(), 1)
+            self.assertIn(b"503 Server full", response)
+        except ConnectionError:
+            pass  # 请求与服务端立即拒绝交错，TCP reset 也表示未准入。
+        self.assertEqual(len(relay.active_connections), 1)
+        first.close()
+        await self.wait_for_slots(0)
+
+    async def test_slots_released_after_all_http_exit_paths(self):
+        relay.MAX_TOTAL_CLIENTS = 1
+        for request, expected in (
+            (b"GET / HTTP/1.1\r\n\r\n", b"200 OK"),
+            (b"GET / HTTP/1.1\r\nUpgrade: websocket\r\n\r\n", b"400 Missing WebSocket key"),
+            (b"GET / HTTP/1.1\r\n", b""),
+        ):
+            reader, writer = await self.connect(upgrade=False)
+            writer.write(request)
+            await writer.drain()
+            response = await asyncio.wait_for(reader.read(), 1.5)
+            self.assertIn(expected, response)
+            await self.wait_for_slots(0)
+        await self.connect()
 
 
 if __name__ == "__main__":
